@@ -9,61 +9,77 @@ use std::{
 
 use crate::{
     app_global_state::UrlData,
-    constants::{MAX_URLS_TO_PROCESS, THREAD_COUNT, sleep_duration},
+    constants::{MAX_URLS_TO_PROCESS, SLEEP_DURATION, THREAD_COUNT},
 };
 
+#[derive(Debug)]
 pub struct Producer {
-    total_processed: Arc<Mutex<isize>>,
-    handlers: Vec<JoinHandle<()>>,
-    producer_tx: Sender<Option<()>>,
-    global_state_rx: Arc<Mutex<Receiver<Option<()>>>>,
+    pub handlers: Vec<JoinHandle<()>>,
+    pub producer_sender: Arc<Mutex<Sender<Option<(isize)>>>>,
+    pub producer_rx: Receiver<Option<(isize)>>,
 }
 
 impl Producer {
-    pub fn new(producer_tx: Sender<Option<()>>, global_state_rx: Receiver<Option<()>>) -> Self {
-        let handlers: Vec<JoinHandle<()>> = Vec::new();
-        let receiver = Arc::new(Mutex::new(global_state_rx));
-        let total_processed = Arc::new(Mutex::new(0));
+    pub fn new(global_state_receiver: &Arc<Mutex<Receiver<Option<(isize)>>>>) -> Self {
+        let (producer_tx, producer_rx) = channel::<Option<(isize)>>();
+        let mut handlers: Vec<JoinHandle<()>> = Vec::new();
+        let producer_sender = Arc::new(Mutex::new(producer_tx));
 
-        Producer {
-            total_processed,
-            handlers,
-            producer_tx,
-            global_state_rx: receiver,
-        }
-    }
-
-    pub fn run(&mut self) {
         for i in 0..THREAD_COUNT {
-            println!("Producer thread {} is sending signal to GlobalState...", i);
-            self.producer_tx
-                .send(Some(()))
-                .expect("Failed to send signal to producer thread");
-            let receiver_clone = Arc::clone(&self.global_state_rx);
-            let total_processed_clone = Arc::clone(&self.total_processed);
+            let global_state_receiver_clone = Arc::clone(global_state_receiver);
+            let producer_tx_clone = Arc::clone(&producer_sender);
+
             let handler = thread::spawn(move || {
-                let received_data = receiver_clone.lock().unwrap().recv();
-                let mut total_processed = total_processed_clone.lock().unwrap();
-                match received_data {
-                    Ok(data) => {
-                        println!("Producer thread {} received: {:?}", i, data);
-                        // Simulate work by sleeping for a short duration
-                        sleep(Duration::from_millis(sleep_duration));
-                        println!("Producer thread {} has finished", i);
-                        *total_processed += 1;
+                loop {
+                    producer_tx_clone
+                        .lock()
+                        .unwrap()
+                        .send(Some(i))
+                        .expect("Failed to send from producer thread");
+                    let received_data = global_state_receiver_clone.lock().unwrap().recv();
+                    match received_data {
+                        Ok(data) => {
+                            match data {
+                                Some(value) => {
+                                    println!("Producer thread {} received: {:?}", i, value);
+                                    // Simulate work by sleeping for a short duration
+                                    sleep(Duration::from_millis(SLEEP_DURATION));
+                                    println!("Producer thread {} has finished", i);
+                                }
+                                None => {
+                                    println!(
+                                        "Producer thread {} received termination signal. Exiting...",
+                                        i
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            println!("Producer thread {} channel closed", i);
+                            break;
+                        }
                     }
-                    Err(_) => println!("Producer thread {} channel closed", i),
                 }
             });
-            self.handlers.push(handler);
+
+            handlers.push(handler);
+        }
+
+        Producer {
+            handlers,
+            producer_sender,
+            producer_rx,
         }
     }
-}
 
-impl Drop for Producer {
-    fn drop(&mut self) {
+    pub fn check_threads_finished(&self) -> bool {
+        self.handlers.iter().all(|handler| handler.is_finished())
+    }
+
+    pub fn join_threads(&mut self) {
         for handler in self.handlers.drain(..) {
-            println!("Joining producer thread and dropping producer sender...");
+            println!("Joining producer thread...");
             handler.join().expect("Producer thread panicked");
         }
     }
