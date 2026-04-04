@@ -7,10 +7,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    app_global_state::UrlData,
-    constants::{MAX_URLS_TO_PROCESS, SLEEP_DURATION, THREAD_COUNT},
-};
+use crate::constants::{SLEEP_DURATION, THREAD_COUNT};
 
 #[derive(Debug)]
 pub struct Producer {
@@ -20,8 +17,8 @@ pub struct Producer {
 }
 
 impl Producer {
-    pub fn new(global_state_receiver: &Arc<Mutex<Receiver<Option<(isize)>>>>) -> Self {
-        let (producer_tx, producer_rx) = channel::<Option<(isize)>>();
+    pub fn new(global_state_receiver: &Arc<Mutex<Receiver<Option<isize>>>>) -> Self {
+        let (producer_tx, producer_rx) = channel::<Option<isize>>();
         let mut handlers: Vec<JoinHandle<()>> = Vec::new();
         let producer_sender = Arc::new(Mutex::new(producer_tx));
 
