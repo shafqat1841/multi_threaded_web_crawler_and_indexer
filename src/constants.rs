@@ -7,4 +7,5 @@ pub const INITIAL_URLS: [&str; 5] = [
 ];
 
 pub const THREAD_COUNT: isize = 4;
+// pub const THREAD_COUNT: isize = 1;
 pub const SLEEP_DURATION: u64 = 1000; // Simulated network latency in milliseconds

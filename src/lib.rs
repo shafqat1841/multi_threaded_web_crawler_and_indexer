@@ -1,10 +1,10 @@
-mod app_global_state;
-mod constants;
-mod producer;
+use crate::entities_system::Entities;
 
-use crate::app_global_state::GlobalState;
+mod constants;
+mod entities_system;
 
 pub fn run() {
-    let mut global_state = GlobalState::new();
-    global_state.run();
+    let mut entities = Entities::new();
+
+    entities.run();
 }
