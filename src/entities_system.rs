@@ -1,16 +1,18 @@
 mod app_global_state;
 mod producer;
+mod consumer;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::{
     constants::INITIAL_URLS,
-    entities_system::{app_global_state::GlobalState, producer::Producer},
+    entities_system::{app_global_state::GlobalState, consumer::Consumer, producer::Producer},
 };
 
 pub struct Entities {
     global_state: GlobalState,
     producer: Producer,
+    consumer: Consumer,
 }
 
 impl Entities {
@@ -18,12 +20,15 @@ impl Entities {
         println!("Initializing the multi-threaded web crawler and indexer...");
 
         let global_state = GlobalState::new();
-        let global_state_receiver = Arc::clone(&global_state.quarded_global_state_rx);
-        let producer = Producer::new(global_state_receiver);
+
+        let producer = Producer::new(global_state.quarded_global_state_rx.clone());
+
+        let consumer = Consumer::new(producer.garded_producer_rx.clone());
 
         Entities {
             global_state,
             producer,
+            consumer,
         }
     }
 

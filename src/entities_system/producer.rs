@@ -1,19 +1,28 @@
 use std::{
-    sync::mpsc::{Receiver, Sender, channel},
+    sync::{
+        Arc, Mutex,
+        mpsc::{Receiver, Sender, channel},
+    },
     thread::{self, JoinHandle, sleep},
     time::Duration,
 };
 
 use crate::{
-    constants::{SLEEP_DURATION, THREAD_COUNT},
+    constants::{NEW_URLS, NewUnReadUrl, SLEEP_DURATION, THREAD_COUNT},
     entities_system::app_global_state::GuardedGlobalReceiverType,
 };
 
 #[derive(Debug)]
+pub struct NewUrls {
+    urls1: Option<String>,
+    urls2: Option<String>,
+}
+
+#[derive(Debug)]
 pub struct Producer {
     pub handlers: Vec<Worker>,
-    pub producer_tx: Sender<Option<isize>>,
-    pub producer_rx: Receiver<Option<isize>>,
+    pub producer_tx: Sender<Option<NewUrls>>,
+    pub garded_producer_rx: Arc<Mutex<Receiver<Option<NewUrls>>>>,
 }
 
 #[derive(Debug)]
@@ -42,10 +51,14 @@ impl Worker {
 impl Producer {
     pub fn new(global_state_receiver: GuardedGlobalReceiverType) -> Self {
         let mut handlers: Vec<Worker> = Vec::new();
-        let (producer_tx, producer_rx) = channel::<Option<isize>>();
+        let (producer_tx, producer_rx) = channel::<Option<NewUrls>>();
+
+        let new_urls = Arc::new(Mutex::new(NEW_URLS.to_vec()));
 
         for i in 0..THREAD_COUNT {
+            let producer_tx_clone = producer_tx.clone();
             let global_state_receiver_clone = global_state_receiver.clone();
+            let new_urls_clone = new_urls.clone();
             let task = move || {
                 println!("thread {} started", i);
                 loop {
@@ -58,14 +71,56 @@ impl Producer {
                         Some(value) => {
                             let mut received_value_0 = { value.0.lock().unwrap() };
                             sleep(Duration::from_millis(SLEEP_DURATION));
+                            let new_url_to_add = {
+                                let mut new_urls_locked = new_urls_clone.lock().unwrap();
+                                let url_1: Option<String> =
+                                    new_urls_locked.pop().map(|s| s.to_string());
+                                let url_2: Option<String> =
+                                    new_urls_locked.pop().map(|s| s.to_string());
+                                NewUrls {
+                                    urls1: url_1,
+                                    urls2: url_2,
+                                }
+                            };
+                            println!(
+                                "new_urls_clone len: {}",
+                                new_urls_clone.lock().unwrap().len()
+                            );
                             received_value_0.visited = true;
                             let mut received_value_1 = { value.1.lock().unwrap() };
                             *received_value_1 += 1;
+                            producer_tx_clone.send(Some(new_url_to_add)).unwrap();
                             println!("task ended");
                         }
                         None => {
                             println!("None value");
-                            break;
+                            let new_url_to_add: Option<NewUrls> = {
+                                let mut new_urls_locked = new_urls_clone.lock().unwrap();
+                                if !new_urls_locked.is_empty() {
+                                    let url_1: Option<String> =
+                                        new_urls_locked.pop().map(|s| s.to_string());
+                                    let url_2: Option<String> =
+                                        new_urls_locked.pop().map(|s| s.to_string());
+
+                                    Some(NewUrls {
+                                        urls1: url_1,
+                                        urls2: url_2,
+                                    })
+                                } else {
+                                    None
+                                }
+                            };
+
+                            match new_url_to_add {
+                                Some(value) => {
+                                    producer_tx_clone.send(Some(value)).unwrap();
+                                }
+                                None => {
+                                    producer_tx_clone.send(None).unwrap();
+                                    println!("No more URLs to add, breaking the loop");
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -76,10 +131,12 @@ impl Producer {
             handlers.push(worker);
         }
 
+        let garded_producer_rx = Arc::new(Mutex::new(producer_rx));
+
         Producer {
             handlers,
             producer_tx,
-            producer_rx,
+            garded_producer_rx,
         }
     }
 
