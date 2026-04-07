@@ -38,6 +38,8 @@ pub const NEW_URLS: [&str; 15] = [
     "https://www.stackoverflow4.com",
 ];
 
+pub const MAX_URLS_TO_PROCESS: isize = 20;
+
 pub const THREAD_COUNT: isize = 4;
 // pub const THREAD_COUNT: isize = 1;
 pub const SLEEP_DURATION: u64 = 1000; // Simulated network latency in milliseconds

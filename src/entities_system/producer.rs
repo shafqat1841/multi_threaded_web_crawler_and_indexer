@@ -9,13 +9,13 @@ use std::{
 
 use crate::{
     constants::{NEW_URLS, NewUnReadUrl, SLEEP_DURATION, THREAD_COUNT},
-    entities_system::app_global_state::GuardedGlobalReceiverType,
+    entities_system::{app_global_state::GuardedGlobalReceiverType, consumer::Consumer},
 };
 
 #[derive(Debug)]
 pub struct NewUrls {
-    urls1: Option<String>,
-    urls2: Option<String>,
+    pub urls1: Option<String>,
+    pub urls2: Option<String>,
 }
 
 #[derive(Debug)]
@@ -71,17 +71,21 @@ impl Producer {
                         Some(value) => {
                             let mut received_value_0 = { value.0.lock().unwrap() };
                             sleep(Duration::from_millis(SLEEP_DURATION));
-                            let new_url_to_add = {
-                                let mut new_urls_locked = new_urls_clone.lock().unwrap();
+                            let mut new_urls_locked = { new_urls_clone.lock().unwrap() };
+                            if !new_urls_locked.is_empty() {
                                 let url_1: Option<String> =
                                     new_urls_locked.pop().map(|s| s.to_string());
                                 let url_2: Option<String> =
                                     new_urls_locked.pop().map(|s| s.to_string());
-                                NewUrls {
+
+                                let new_value = Some(NewUrls {
                                     urls1: url_1,
                                     urls2: url_2,
-                                }
-                            };
+                                });
+                                producer_tx_clone.send(new_value).unwrap();
+                            } else {
+                                producer_tx_clone.send(None).unwrap();
+                            }
                             println!(
                                 "new_urls_clone len: {}",
                                 new_urls_clone.lock().unwrap().len()
@@ -89,37 +93,26 @@ impl Producer {
                             received_value_0.visited = true;
                             let mut received_value_1 = { value.1.lock().unwrap() };
                             *received_value_1 += 1;
-                            producer_tx_clone.send(Some(new_url_to_add)).unwrap();
                             println!("task ended");
                         }
                         None => {
                             println!("None value");
-                            let new_url_to_add: Option<NewUrls> = {
-                                let mut new_urls_locked = new_urls_clone.lock().unwrap();
-                                if !new_urls_locked.is_empty() {
-                                    let url_1: Option<String> =
-                                        new_urls_locked.pop().map(|s| s.to_string());
-                                    let url_2: Option<String> =
-                                        new_urls_locked.pop().map(|s| s.to_string());
+                            let mut new_urls_locked = { new_urls_clone.lock().unwrap() };
+                            if !new_urls_locked.is_empty() {
+                                let url_1: Option<String> =
+                                    new_urls_locked.pop().map(|s| s.to_string());
+                                let url_2: Option<String> =
+                                    new_urls_locked.pop().map(|s| s.to_string());
 
-                                    Some(NewUrls {
-                                        urls1: url_1,
-                                        urls2: url_2,
-                                    })
-                                } else {
-                                    None
-                                }
-                            };
-
-                            match new_url_to_add {
-                                Some(value) => {
-                                    producer_tx_clone.send(Some(value)).unwrap();
-                                }
-                                None => {
-                                    producer_tx_clone.send(None).unwrap();
-                                    println!("No more URLs to add, breaking the loop");
-                                    break;
-                                }
+                                let new_value = Some(NewUrls {
+                                    urls1: url_1,
+                                    urls2: url_2,
+                                });
+                                producer_tx_clone.send(new_value).unwrap();
+                            } else {
+                                producer_tx_clone.send(None).unwrap();
+                                println!("No more URLs to add, breaking the loop");
+                                break;
                             }
                         }
                     }
@@ -141,7 +134,8 @@ impl Producer {
     }
 
     pub fn check_threads_finished(&self) -> bool {
-        self.handlers.iter().all(|handler| handler.is_finished())
+        let producer_threads_finished = self.handlers.iter().all(|handler| handler.is_finished());
+        producer_threads_finished
     }
 
     pub fn join_threads(&mut self) {

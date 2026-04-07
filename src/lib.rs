@@ -4,7 +4,7 @@ mod constants;
 mod entities_system;
 
 pub fn run() {
-    let mut entities = Entities::new();
+    let entities = Entities::new();
 
     entities.run();
 }

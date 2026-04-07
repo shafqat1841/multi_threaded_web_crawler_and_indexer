@@ -1,4 +1,5 @@
 use std::{
+    mem,
     sync::{
         Arc, Mutex,
         mpsc::{Receiver, Sender, channel},
@@ -6,12 +7,12 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::entities_system::producer::NewUrls;
+use crate::entities_system::producer::{NewUrls};
 
 pub struct Consumer {
     handler: JoinHandle<()>,
     producer_rx: Arc<Mutex<Receiver<Option<NewUrls>>>>,
-    consumer_rx: Receiver<Option<String>>,
+    pub consumer_rx: Receiver<Option<String>>,
 }
 
 impl Consumer {
@@ -24,7 +25,22 @@ impl Consumer {
 
                 match rec {
                     Some(value) => {
-                        println!("Consumer received value: {:?}", value);
+                        let url_to_process_1 = value.urls1;
+                        println!("Consumer processing url 1: {:?}", url_to_process_1);
+                        let url_to_process_2 = value.urls2;
+                        println!("Consumer processing url 2: {:?}", url_to_process_2);
+                        match consumer_tx.send(url_to_process_1) {
+                            Ok(()) => {}
+                            Err(_) => {
+                                eprintln!("Failed to send url 1 to consumer");
+                            }
+                        }
+                        match consumer_tx.send(url_to_process_2) {
+                            Ok(()) => {}
+                            Err(_) => {
+                                eprintln!("Failed to send url 2 to consumer");
+                            }
+                        }
                     }
                     None => {
                         println!("Consumer received None");
@@ -33,12 +49,24 @@ impl Consumer {
                 }
             }
         };
-        let handler = thread::spawn(task);
+
+        let handler = thread::Builder::new()
+            .name("consumer thread".to_string())
+            .spawn(task)
+            .unwrap();
 
         Consumer {
             producer_rx,
             handler,
             consumer_rx,
         }
+    }
+
+    pub fn check_threads_finished(&self) -> bool {
+        self.handler.is_finished()
+    }
+
+    pub fn join_thread(self) {
+        self.handler.join().unwrap()
     }
 }
