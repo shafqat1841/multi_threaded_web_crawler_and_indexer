@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 pub const INITIAL_URLS: [&str; 5] = [
     "https://www.example.com",
     "https://www.rust-lang.org",
@@ -18,25 +20,25 @@ impl NewUnReadUrl {
     }
 }
 
-pub const NEW_URLS: [&str; 15] = [
-    "https://www.example2.com",
-    "https://www.rust-lang2.org",
-    "https://www.wikipedia2.org",
-    "https://www.github2.com",
-    "https://www.stackoverflow2.com",
+// pub const NEW_URLS: [String; 15] = [
+//     "https://www.example2.com",
+//     "https://www.rust-lang2.org",
+//     "https://www.wikipedia2.org",
+//     "https://www.github2.com",
+//     "https://www.stackoverflow2.com",
 
-    "https://www.example3.com",
-    "https://www.rust-lang3.org",
-    "https://www.wikipedia3.org",
-    "https://www.github3.com",
-    "https://www.stackoverflow3.com",
+//     "https://www.example3.com",
+//     "https://www.rust-lang3.org",
+//     "https://www.wikipedia3.org",
+//     "https://www.github3.com",
+//     "https://www.stackoverflow3.com",
 
-    "https://www.example4.com",
-    "https://www.rust-lang4.org",
-    "https://www.wikipedia4.org",
-    "https://www.github4.com",
-    "https://www.stackoverflow4.com",
-];
+//     "https://www.example4.com",
+//     "https://www.rust-lang4.org",
+//     "https://www.wikipedia4.org",
+//     "https://www.github4.com",
+//     "https://www.stackoverflow4.com",
+// ];
 
 pub const MAX_URLS_TO_PROCESS: isize = 5;
 
