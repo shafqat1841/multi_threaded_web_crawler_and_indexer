@@ -38,7 +38,7 @@ pub const NEW_URLS: [&str; 15] = [
     "https://www.stackoverflow4.com",
 ];
 
-pub const MAX_URLS_TO_PROCESS: isize = 20;
+pub const MAX_URLS_TO_PROCESS: isize = 5;
 
 pub const THREAD_COUNT: isize = 4;
 // pub const THREAD_COUNT: isize = 1;

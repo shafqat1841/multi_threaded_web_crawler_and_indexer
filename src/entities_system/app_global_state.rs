@@ -17,9 +17,16 @@ pub struct UrlData {
 }
 
 type GuardedUrlDataType = (Arc<Mutex<UrlData>>, Arc<Mutex<isize>>);
-type GlobalSenderType = Sender<Option<GuardedUrlDataType>>;
-pub type GlobalReceiverType = Receiver<Option<GuardedUrlDataType>>;
+pub enum ChannelData {
+    ContinueProcessing(GuardedUrlDataType),
+    EndProcessing,
+}
+
+type GlobalSenderType = Sender<ChannelData>;
+pub type GlobalReceiverType = Receiver<ChannelData>;
+
 pub type GuardedGlobalReceiverType = Arc<Mutex<GlobalReceiverType>>;
+
 
 #[derive(Debug)]
 pub struct GlobalState {
@@ -34,10 +41,12 @@ pub struct GlobalState {
     pub quarded_global_state_rx: GuardedGlobalReceiverType,
 }
 
+
+
 impl GlobalState {
     pub fn new() -> Self {
         // let (global_state_tx, global_state_rx) = channel::<Option<GuardedUrlDataType>>();
-        let (global_state_tx, global_state_rx) = channel::<Option<GuardedUrlDataType>>();
+        let (global_state_tx, global_state_rx) = channel::<ChannelData>();
 
         let mut urls_data: HashMap<String, Arc<Mutex<UrlData>>> = HashMap::new();
         let url_visited = 0;
@@ -63,6 +72,54 @@ impl GlobalState {
             url_visited: garded_url_visited,
             global_state_tx,
             quarded_global_state_rx,
+        }
+    }
+
+    pub fn get_unvisited_url(&self) -> Option<(&String, &Arc<Mutex<UrlData>>)> {
+        let unvisited_url = self.urls_data.iter().find(|item| {
+            let lock_item = { item.1.lock() };
+            let url_info = match lock_item {
+                Ok(value) => Some(value),
+                Err(_) => {
+                    eprintln!("Failed to lock url data for url: {:?}", item.0);
+                    None
+                }
+            };
+            match url_info {
+                Some(value) => !value.visited && !value.in_processing,
+                None => false,
+            }
+        });
+        unvisited_url
+    }
+
+    pub fn send_data_to_producer(&self) {
+        let (url_key, url_arc) = match self.get_unvisited_url() {
+            Some(found) => found,
+            None => {
+                let _ = self.global_state_tx.send(ChannelData::EndProcessing);
+                return;
+            }
+        };
+
+        {
+            match url_arc.lock() {
+                Ok(mut data) => data.in_processing = true,
+                Err(e) => {
+                    eprintln!("Poison error locking {}: {:?}", url_key, e);
+                    return; // Can't process if lock is poisoned
+                }
+            }
+        }
+
+        let send_data = (Arc::clone(url_arc), Arc::clone(&self.url_visited));
+
+        if let Err(e) = self.global_state_tx.send(ChannelData::ContinueProcessing(send_data)) {
+            eprintln!("Channel send failed for {}: {:?}", url_key, e);
+
+            if let Ok(mut data) = url_arc.lock() {
+                data.in_processing = false;
+            }
         }
     }
 }

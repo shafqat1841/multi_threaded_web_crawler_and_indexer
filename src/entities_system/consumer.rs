@@ -7,7 +7,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::entities_system::producer::{NewUrls};
+use crate::entities_system::producer::NewUrls;
 
 pub struct Consumer {
     handler: JoinHandle<()>,
@@ -21,7 +21,38 @@ impl Consumer {
         let producer_rx_clone = producer_rx.clone();
         let task = move || {
             loop {
-                let rec = producer_rx_clone.lock().unwrap().recv().unwrap();
+                // println!("consumer loop");
+                // let rec = producer_rx_clone.lock().unwrap().try_recv().unwrap();
+                let rec_lock = { producer_rx_clone.lock() };
+                let rec_lock_res = match rec_lock {
+                    Ok(lock_res) => lock_res,
+                    Err(err) => {
+                        eprintln!("lock_res error: {:?}", err);
+                        match consumer_tx.send(None) {
+                            Ok(()) => {}
+                            Err(err) => {
+                                eprintln!("Fconsumer_tx.send err: {:?}", err);
+                            }
+                        }
+                        continue;
+                    }
+                };
+
+                let rec_lock_res_recv = rec_lock_res.recv() ;
+
+                let rec = match rec_lock_res_recv {
+                    Ok(value) => value,
+                    Err(err) => {
+                        eprintln!("rec_lock_res_recv error: {:?}", err);
+                        match consumer_tx.send(None) {
+                            Ok(()) => {}
+                            Err(err) => {
+                                eprintln!("Fconsumer_tx.send err: {:?}", err);
+                            }
+                        }
+                        continue;
+                    }
+                };
 
                 match rec {
                     Some(value) => {
