@@ -15,7 +15,6 @@ use crate::{
     },
 };
 
-
 #[derive(Debug)]
 pub struct NewUrls {
     pub urls1: Option<String>,
@@ -60,6 +59,10 @@ impl Producer {
             garded_producer_rx,
         }
     }
+
+    // pub fn set_global_state_rx(&self) {
+    //     self
+    // }
 
     pub fn check_threads_finished(&self) -> bool {
         let producer_threads_finished = self.handlers.iter().all(|handler| handler.is_finished());

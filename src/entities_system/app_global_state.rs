@@ -130,10 +130,15 @@ impl GlobalState {
         }
     }
 
-    pub fn send_end_process_signal(&self) {
-        let _ = self
+    pub fn send_end_process_signal(&self) -> Result<(), std::sync::mpsc::SendError<GlobalStateChannelData>> {
+        let send_res = self
             .global_state_tx
             .send(GlobalStateChannelData::EndProcessing);
+        if let Err(err) = send_res {
+            println!("Global state send err: {}",err);
+            return Err(err);
+        }
+        Ok(())
     }
 
     fn is_max_url_visited(&self) -> bool {
