@@ -7,116 +7,98 @@ use std::sync::{Arc, Mutex};
 use crate::{
     constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS},
     entities_system::{
-        app_global_state::{GlobalState, UrlData},
+        app_global_state::{GlobalState, GlobalStateChannelData, UrlData},
         consumer::Consumer,
         producer::Producer,
     },
 };
 
 pub struct Entities {
-    global_state: GlobalState,
+    global_state: Arc<Mutex<GlobalState>>,
     producer: Producer,
-    // consumer: Consumer,
+    consumer: Consumer,
 }
 
 impl Entities {
     pub fn new() -> Self {
         println!("Initializing the multi-threaded web crawler and indexer...");
 
-        let global_state = GlobalState::new();
+        // let mut global_state = GlobalState::new();
 
-        let producer = Producer::new(global_state.quarded_global_state_rx.clone());
+        let guarded_global_state = Arc::new(Mutex::new(GlobalState::new()));
+        let producer = Producer::new(
+            guarded_global_state
+                .lock()
+                .unwrap()
+                .quarded_global_state_rx
+                .clone(),
+        );
 
-        // let consumer = Consumer::new(producer.garded_producer_rx.clone());
+        let consumer = Consumer::new(
+            guarded_global_state.clone(),
+            producer.garded_producer_rx.clone(),
+        );
 
         Entities {
-            global_state,
+            global_state: guarded_global_state,
             producer,
-            // consumer: consumer,
+            consumer: consumer,
         }
     }
 
     pub fn run(self) {
-        let mut global_state = self.global_state;
+        let global_state = self.global_state;
         let mut producer = self.producer;
-        // let mut consumer = Some(self.consumer);
+        let mut consumer = Some(self.consumer);
 
         println!("Main run started");
         loop {
+            global_state.lock().unwrap().send_data_to_producer();
 
-            global_state.send_data_to_producer();
+            if global_state.lock().unwrap().is_all_urls_visiting_done() {
+                let _ = global_state.lock().unwrap().send_end_process_signal();
 
-
-            // let mut url: Option<String> = None;
-            // match consumer.as_ref() {
-            //     Some(consumer) => match consumer.consumer_rx.try_recv() {
-            //         Ok(value) => {
-            //             url = value;
-            //         }
-            //         Err(err) => {
-            //             eprintln!("Main thread failed to receive url from consumer: {:?}", err);
-            //         }
-            //     },
-            //     None => {
-            //         println!("Main thread received None from consumer");
-            //     }
-            // }
-
-            // match url {
-            //     Some(url) => {
-            //         let arc_url = Arc::new(url);
-            //         println!("arc_url: {}", arc_url);
-            //         let url_data = UrlData {
-            //             url: arc_url.clone().to_string(),
-            //             content: String::new(),
-            //             visited: false,
-            //             in_processing: false,
-            //         };
-            //         let url_data_quarded = Arc::new(Mutex::new(url_data));
-            //         global_state
-            //             .urls_data
-            //             .insert(arc_url.clone().to_string(), url_data_quarded);
-            //     }
-            //     None => {
-            //         println!("Main thread received None url data");
-            //     }
-            // }
-
-            let url_visited = { global_state.url_visited.lock().unwrap().clone() };
-
-            // println!("url_visited: {}", url_visited);
-
-            if url_visited >= MAX_URLS_TO_PROCESS {
                 let producer_threads_finished = producer.check_threads_finished();
-                // let consumer_thread_finished = consumer.as_ref().unwrap().check_threads_finished();
-                // let consumer_thread_finished = consumer.as_ref().unwrap().check_threads_finished();
+                // let consumer_thread_finished = consumer.check_threads_finished();
+                let consumer_thread_finished = match consumer.as_ref() {
+                    Some(value) => value.check_threads_finished(),
+                    _ => true,
+                };
 
                 if producer_threads_finished {
                     println!("All producer threads finished, breaking the loop");
                     producer.join_threads();
-                    break;
-                } else {
-                    println!("Waiting for threads to finish...");
+                    // break;
                 }
 
-                // if consumer_thread_finished {
-                //     println!("All consumer threads finished, breaking the loop");
-                //     consumer.take().unwrap().join_thread();
-                // }
+                if consumer_thread_finished {
+                    match consumer.take() {
+                        Some(val) => {
+                            println!("All consumer threads finished, breaking the loop");
+                            val.join_thread()
+                        }
+                        None => {}
+                    };
+                }
 
-                // if producer_threads_finished && consumer_thread_finished {
-                // if producer_threads_finished {
-                //     break;
-                // } else {
-                //     println!("Waiting for threads to finish...");
-                // }
+                if producer_threads_finished && consumer_thread_finished {
+                    break;
+                }
             }
         }
         println!("Main run ended");
 
-        global_state.urls_data.iter().for_each(|item| {
-            println!("{:?}", item.1.lock().unwrap());
-        });
+        {
+            println!("length: {}", global_state.lock().unwrap().urls_data.len());
+            global_state
+                .lock()
+                .unwrap()
+                .urls_data
+                .iter()
+                .for_each(|item| {
+                    println!("{:?}", item.1.lock().unwrap());
+                });
+        }
 
         println!("Main ended")
     }

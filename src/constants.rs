@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{thread::sleep, time::Duration};
 
 pub const INITIAL_URLS: [&str; 5] = [
     "https://www.example.com",
@@ -8,40 +8,12 @@ pub const INITIAL_URLS: [&str; 5] = [
     "https://www.stackoverflow.com",
 ];
 
-#[derive(Clone)]
-pub struct NewUnReadUrl {
-    pub url: &'static str,
-    pub took: bool,
-}
-
-impl NewUnReadUrl {
-    pub const fn new(url: &'static str) -> Self {
-        NewUnReadUrl { url, took: false }
-    }
-}
-
-// pub const NEW_URLS: [String; 15] = [
-//     "https://www.example2.com",
-//     "https://www.rust-lang2.org",
-//     "https://www.wikipedia2.org",
-//     "https://www.github2.com",
-//     "https://www.stackoverflow2.com",
-
-//     "https://www.example3.com",
-//     "https://www.rust-lang3.org",
-//     "https://www.wikipedia3.org",
-//     "https://www.github3.com",
-//     "https://www.stackoverflow3.com",
-
-//     "https://www.example4.com",
-//     "https://www.rust-lang4.org",
-//     "https://www.wikipedia4.org",
-//     "https://www.github4.com",
-//     "https://www.stackoverflow4.com",
-// ];
-
-pub const MAX_URLS_TO_PROCESS: isize = 5;
+pub const MAX_URLS_TO_PROCESS: isize = 15;
 
 pub const THREAD_COUNT: isize = 4;
 // pub const THREAD_COUNT: isize = 1;
 pub const SLEEP_DURATION: u64 = 1000; // Simulated network latency in milliseconds
+
+pub fn sleep_in_milisecond(milisecond: u64) {
+    sleep(Duration::new(milisecond, 0));
+}

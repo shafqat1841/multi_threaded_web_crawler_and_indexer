@@ -1,84 +1,40 @@
+mod consumer_task;
+
 use std::{
-    mem,
     sync::{
         Arc, Mutex,
-        mpsc::{Receiver, Sender, channel},
+        mpsc::{Receiver, channel},
     },
     thread::{self, JoinHandle},
 };
 
-use crate::entities_system::producer::NewUrls;
+use crate::entities_system::{
+    app_global_state::GlobalState,
+    consumer::consumer_task::ConsumerTask,
+    producer::{NewUrls, ProducerChannelData},
+};
 
 pub struct Consumer {
     handler: JoinHandle<()>,
-    producer_rx: Arc<Mutex<Receiver<Option<NewUrls>>>>,
+    producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
     pub consumer_rx: Receiver<Option<String>>,
 }
 
 impl Consumer {
-    pub fn new(producer_rx: Arc<Mutex<Receiver<Option<NewUrls>>>>) -> Self {
+    pub fn new(
+        guarded_global_state: Arc<Mutex<GlobalState>>,
+        producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
+    ) -> Self {
         let (consumer_tx, consumer_rx) = channel::<Option<String>>();
         let producer_rx_clone = producer_rx.clone();
+        let guarded_global_state_clone = guarded_global_state.clone();
         let task = move || {
-            loop {
-                // println!("consumer loop");
-                // let rec = producer_rx_clone.lock().unwrap().try_recv().unwrap();
-                let rec_lock = { producer_rx_clone.lock() };
-                let rec_lock_res = match rec_lock {
-                    Ok(lock_res) => lock_res,
-                    Err(err) => {
-                        eprintln!("lock_res error: {:?}", err);
-                        match consumer_tx.send(None) {
-                            Ok(()) => {}
-                            Err(err) => {
-                                eprintln!("Fconsumer_tx.send err: {:?}", err);
-                            }
-                        }
-                        continue;
-                    }
-                };
-
-                let rec_lock_res_recv = rec_lock_res.recv() ;
-
-                let rec = match rec_lock_res_recv {
-                    Ok(value) => value,
-                    Err(err) => {
-                        eprintln!("rec_lock_res_recv error: {:?}", err);
-                        match consumer_tx.send(None) {
-                            Ok(()) => {}
-                            Err(err) => {
-                                eprintln!("Fconsumer_tx.send err: {:?}", err);
-                            }
-                        }
-                        continue;
-                    }
-                };
-
-                match rec {
-                    Some(value) => {
-                        let url_to_process_1 = value.urls1;
-                        println!("Consumer processing url 1: {:?}", url_to_process_1);
-                        let url_to_process_2 = value.urls2;
-                        println!("Consumer processing url 2: {:?}", url_to_process_2);
-                        match consumer_tx.send(url_to_process_1) {
-                            Ok(()) => {}
-                            Err(_) => {
-                                eprintln!("Failed to send url 1 to consumer");
-                            }
-                        }
-                        match consumer_tx.send(url_to_process_2) {
-                            Ok(()) => {}
-                            Err(_) => {
-                                eprintln!("Failed to send url 2 to consumer");
-                            }
-                        }
-                    }
-                    None => {
-                        println!("Consumer received None");
-                        break;
-                    }
-                }
-            }
+            let consumer_task = ConsumerTask::new(
+                guarded_global_state_clone,
+                producer_rx_clone.clone(),
+                consumer_tx,
+            );
+            consumer_task.run();
         };
 
         let handler = thread::Builder::new()
