@@ -1,10 +1,7 @@
 mod consumer_task;
 
 use std::{
-    sync::{
-        Arc, Mutex,
-        mpsc::{Receiver, channel},
-    },
+    sync::{Arc, Mutex, mpsc::Receiver},
     thread::{self, JoinHandle},
 };
 
@@ -15,8 +12,6 @@ use crate::entities_system::{
 
 pub struct Consumer {
     handler: JoinHandle<()>,
-    producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
-    pub consumer_rx: Receiver<Option<String>>,
 }
 
 impl Consumer {
@@ -24,15 +19,11 @@ impl Consumer {
         guarded_global_state: Arc<Mutex<GlobalState>>,
         producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
     ) -> Self {
-        let (consumer_tx, consumer_rx) = channel::<Option<String>>();
         let producer_rx_clone = producer_rx.clone();
         let guarded_global_state_clone = guarded_global_state.clone();
         let task = move || {
-            let consumer_task = ConsumerTask::new(
-                guarded_global_state_clone,
-                producer_rx_clone.clone(),
-                consumer_tx,
-            );
+            let consumer_task =
+                ConsumerTask::new(guarded_global_state_clone, producer_rx_clone.clone());
             consumer_task.run();
         };
 
@@ -41,11 +32,7 @@ impl Consumer {
             .spawn(task)
             .unwrap();
 
-        Consumer {
-            producer_rx,
-            handler,
-            consumer_rx,
-        }
+        Consumer { handler }
     }
 
     pub fn check_threads_finished(&self) -> bool {

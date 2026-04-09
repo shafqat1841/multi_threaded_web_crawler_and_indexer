@@ -1,6 +1,6 @@
 use std::sync::{
     Arc, Mutex,
-    mpsc::{Receiver, Sender, TryRecvError},
+    mpsc::{Receiver, TryRecvError},
 };
 
 use crate::entities_system::{
@@ -10,7 +10,6 @@ use crate::entities_system::{
 
 pub struct ConsumerTask {
     producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
-    consumer_tx: Sender<Option<String>>,
     guarded_global_state: Arc<Mutex<GlobalState>>,
 }
 
@@ -18,11 +17,9 @@ impl ConsumerTask {
     pub fn new(
         guarded_global_state: Arc<Mutex<GlobalState>>,
         producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
-        consumer_tx: Sender<Option<String>>,
     ) -> Self {
         ConsumerTask {
             producer_rx,
-            consumer_tx,
             guarded_global_state,
         }
     }
@@ -80,7 +77,7 @@ impl ConsumerTask {
             in_processing: false,
             visited: false,
             content: "".to_string(),
-            url: val.clone(),
+            // url: val.clone(),
         };
 
         let arc_data = Arc::new(Mutex::new(new_data));
