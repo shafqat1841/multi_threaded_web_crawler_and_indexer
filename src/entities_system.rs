@@ -2,7 +2,7 @@ mod app_global_state;
 mod consumer;
 mod producer;
 
-use std::{fmt::Display, sync::{Arc, Mutex, MutexGuard, PoisonError}};
+use std::{fmt::Display, sync::{Arc, Mutex}};
 
 use crate::entities_system::{
     app_global_state::GlobalState, consumer::Consumer, producer::Producer,

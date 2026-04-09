@@ -1,7 +1,7 @@
 use std::{
     sync::{
         Arc, Mutex,
-        mpsc::{Receiver, Sender, channel},
+        mpsc::{Receiver, channel},
     },
     thread::{self, JoinHandle},
 };
@@ -29,7 +29,6 @@ pub enum ProducerChannelData {
 #[derive(Debug)]
 pub struct Producer {
     pub handlers: Vec<JoinHandle<()>>,
-    pub producer_tx: Sender<ProducerChannelData>,
     pub garded_producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
 }
 
@@ -55,14 +54,9 @@ impl Producer {
 
         Producer {
             handlers,
-            producer_tx,
             garded_producer_rx,
         }
     }
-
-    // pub fn set_global_state_rx(&self) {
-    //     self
-    // }
 
     pub fn check_threads_finished(&self) -> bool {
         let producer_threads_finished = self.handlers.iter().all(|handler| handler.is_finished());
