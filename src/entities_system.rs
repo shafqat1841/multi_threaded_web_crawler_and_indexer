@@ -4,13 +4,8 @@ mod producer;
 
 use std::sync::{Arc, Mutex};
 
-use crate::{
-    constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS},
-    entities_system::{
-        app_global_state::{GlobalState, GlobalStateChannelData, UrlData},
-        consumer::Consumer,
-        producer::Producer,
-    },
+use crate::entities_system::{
+    app_global_state::GlobalState, consumer::Consumer, producer::Producer,
 };
 
 pub struct Entities {

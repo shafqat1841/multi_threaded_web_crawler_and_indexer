@@ -19,11 +19,8 @@ enum GetGlobalStateDataErr {
     EmptyErr,
 }
 
-type GetGlobalStateDataRes = Result<GlobalStateChannelData, GetGlobalStateDataErr>;
-
 pub struct ProducerTask {
     global_state_receiver: GuardedGlobalReceiverType,
-    // new_urls: Arc<Mutex<Vec<String>>>,
     new_urls: Vec<String>,
     producer_tx: Sender<ProducerChannelData>,
 }

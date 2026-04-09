@@ -9,9 +9,8 @@ use std::{
 };
 
 use crate::entities_system::{
-    app_global_state::GlobalState,
-    consumer::consumer_task::ConsumerTask,
-    producer::{NewUrls, ProducerChannelData},
+    app_global_state::GlobalState, consumer::consumer_task::ConsumerTask,
+    producer::ProducerChannelData,
 };
 
 pub struct Consumer {

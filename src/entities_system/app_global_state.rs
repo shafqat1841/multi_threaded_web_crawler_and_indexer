@@ -4,11 +4,9 @@ use std::{
         Arc, Mutex,
         mpsc::{Receiver, Sender, channel},
     },
-    thread::sleep,
-    time::Duration,
 };
 
-use crate::constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS, sleep_in_milisecond};
+use crate::constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS};
 
 #[derive(Debug)]
 pub struct UrlData {
