@@ -76,7 +76,7 @@ impl ConsumerTask {
         let new_data: UrlData = UrlData {
             in_processing: false,
             visited: false,
-            content: "".to_string(),
+            // content: "".to_string(),
             // url: val.clone(),
         };
 

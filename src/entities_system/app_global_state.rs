@@ -11,7 +11,7 @@ use crate::constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS};
 #[derive(Debug)]
 pub struct UrlData {
     // pub url: String,
-    pub content: String,
+    // pub content: String,
     pub visited: bool,
     pub in_processing: bool,
 }
@@ -50,7 +50,7 @@ impl GlobalState {
         INITIAL_URLS.iter().for_each(|url| {
             let url_data = UrlData {
                 // url: url.to_string(),
-                content: String::new(),
+                // content: String::new(),
                 visited: false,
                 in_processing: false,
             };
