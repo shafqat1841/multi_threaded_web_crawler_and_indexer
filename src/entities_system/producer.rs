@@ -42,19 +42,26 @@ impl Producer {
     pub fn new(
         guarded_global_state: Arc<std::sync::Mutex<GlobalState>>,
     ) -> Result<Self, ProducerErr> {
-
-        let global_state_lock = guarded_global_state
+        let mut global_state_lock = guarded_global_state
             .lock()
             .map_err(|_| ProducerErr::GlobalStateRxNoneErr)?;
 
-        let global_state_receiver = global_state_lock.quarded_global_state_rx.clone();
 
         let mut handlers: Vec<JoinHandle<()>> = Vec::new();
         let (producer_tx, producer_rx) = channel::<ProducerChannelData>();
 
         for _ in 0..THREAD_COUNT {
+            let rx = global_state_lock.global_state_rx_array.pop();
+
+            let global_state_receiver = match rx {
+                None => {
+                    return Err(ProducerErr::GlobalStateRxNoneErr)
+                },
+                Some(value) => value
+            };
+
             let producer_tx_clone = producer_tx.clone();
-            let global_state_receiver = global_state_receiver.clone();
+            // let global_state_receiver = global_state_receiver.clone();
             let task = move || {
                 let mut producer_task = ProducerTask::new(global_state_receiver, producer_tx_clone);
                 producer_task.run();

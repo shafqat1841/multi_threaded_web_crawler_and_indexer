@@ -66,7 +66,8 @@ impl Entities {
 
                 if lock.is_all_urls_visiting_done() {
                     if let Err(_) = lock.send_end_process_signal() {
-                        continue;
+                        // continue;
+                        break;
                     }
 
                     let producer_threads_finished = producer.check_threads_finished();

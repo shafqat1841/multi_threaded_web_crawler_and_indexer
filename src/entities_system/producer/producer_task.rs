@@ -4,6 +4,8 @@ use std::{
     time::Duration,
 };
 
+use crossbeam::channel::TryRecvError;
+
 use crate::{
     constants::SLEEP_DURATION,
     entities_system::{
@@ -90,27 +92,11 @@ impl ProducerTask {
     }
 
     fn get_global_state_data(&self) -> Result<GlobalStateChannelData, GetGlobalStateDataErr> {
-        let global_state_locked = &self.global_state_receiver.lock();
 
-        let lock = match global_state_locked {
-            Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!(
-                    "Producer thread failed to lock global state receiver: {:?}",
-                    poisoned
-                );
-                return Err(GetGlobalStateDataErr::PoisonErr);
-            }
-        };
-
-        let res = match lock.try_recv() {
+        let res = match self.global_state_receiver.try_recv() {
             Ok(value) => value,
             Err(err) => {
-                // println!(
-                //     "Producer thread failed to receive data from global state: {:?}",
-                //     err
-                // );
-                if err == std::sync::mpsc::TryRecvError::Empty {
+                if err == TryRecvError::Empty {
                     // return Ok(GlobalStateChannelData::EndProcessing);
                     return Err(GetGlobalStateDataErr::EmptyErr);
                 }

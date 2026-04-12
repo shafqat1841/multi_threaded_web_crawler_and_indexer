@@ -1,12 +1,11 @@
 use std::{
     collections::HashMap,
-    sync::{
-        Arc, Mutex,
-        mpsc::{Receiver, Sender, channel},
-    },
+    sync::{Arc, Mutex},
 };
 
-use crate::constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS};
+use crossbeam::channel::{Receiver, SendError, SendTimeoutError, Sender, unbounded};
+
+use crate::constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS, THREAD_COUNT};
 
 #[derive(Debug)]
 pub struct UrlData {
@@ -25,7 +24,7 @@ pub enum GlobalStateChannelData {
 type GlobalSenderType = Sender<GlobalStateChannelData>;
 pub type GlobalReceiverType = Receiver<GlobalStateChannelData>;
 
-pub type GuardedGlobalReceiverType = Arc<Mutex<GlobalReceiverType>>;
+pub type GuardedGlobalReceiverType = Receiver<GlobalStateChannelData>;
 
 #[derive(Debug)]
 pub struct GlobalState {
@@ -33,16 +32,20 @@ pub struct GlobalState {
     // so you don't crawl the same page twice.
     pub url_visited: Arc<Mutex<isize>>,
     pub urls_data: HashMap<String, Arc<Mutex<UrlData>>>,
-    // pub urls_data_gauarded: Arc<Mutex<HashMap<String, UrlData>>>,
-    // pub urls_data: HashMap<String, UrlData>,
     pub global_state_tx: GlobalSenderType,
-    // pub global_state_rx: Receiver<Option<isize>>,
-    pub quarded_global_state_rx: GuardedGlobalReceiverType,
+    pub global_state_rx_array: Vec<Receiver<GlobalStateChannelData>>
 }
 
 impl GlobalState {
     pub fn new() -> Self {
-        let (global_state_tx, global_state_rx) = channel::<GlobalStateChannelData>();
+        let (global_state_tx, global_state_rx) = unbounded::<GlobalStateChannelData>();
+
+        let mut global_state_rx_array: Vec<Receiver<GlobalStateChannelData>> = Vec::new();
+        
+        for _ in 0..THREAD_COUNT {
+            let global_state_rx_clone = global_state_rx.clone();
+            global_state_rx_array.push(global_state_rx_clone);
+        }
 
         let mut urls_data: HashMap<String, Arc<Mutex<UrlData>>> = HashMap::new();
         let url_visited = 0;
@@ -55,14 +58,15 @@ impl GlobalState {
             urls_data.insert(url.to_string(), url_data_quarded);
         });
 
-        let quarded_global_state_rx = Arc::new(Mutex::new(global_state_rx));
+        // let quarded_global_state_rx = Arc::new(Mutex::new(global_state_rx));
         let garded_url_visited = Arc::new(Mutex::new(url_visited));
 
         GlobalState {
             urls_data,
             url_visited: garded_url_visited,
             global_state_tx,
-            quarded_global_state_rx,
+            // quarded_global_state_rx,
+            global_state_rx_array,
         }
     }
 
@@ -124,12 +128,14 @@ impl GlobalState {
         }
     }
 
-    pub fn send_end_process_signal(&self) -> Result<(), std::sync::mpsc::SendError<GlobalStateChannelData>> {
+    pub fn send_end_process_signal(
+        &self,
+    ) -> Result<(), SendError<GlobalStateChannelData>> {
         let send_res = self
             .global_state_tx
             .send(GlobalStateChannelData::EndProcessing);
         if let Err(err) = send_res {
-            println!("Global state send err: {}",err);
+            println!("All global state recivers are disconnected");
             return Err(err);
         }
         Ok(())
