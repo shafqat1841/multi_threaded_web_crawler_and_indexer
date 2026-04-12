@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, MutexGuard, PoisonError,
         mpsc::{Receiver, channel},
     },
     thread::{self, JoinHandle},
@@ -8,11 +8,11 @@ use std::{
 
 mod producer_task;
 
+use thiserror::Error;
+
 use crate::{
     constants::THREAD_COUNT,
-    entities_system::{
-        app_global_state::GuardedGlobalReceiverType, producer::producer_task::ProducerTask,
-    },
+    entities_system::{app_global_state::GlobalState, producer::producer_task::ProducerTask},
 };
 
 #[derive(Debug)]
@@ -32,8 +32,23 @@ pub struct Producer {
     pub garded_producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
 }
 
+#[derive(Error, Debug)]
+pub enum ProducerErr {
+    #[error("An error occured during locking of global state receiver")]
+    GlobalStateRxNoneErr,
+}
+
 impl Producer {
-    pub fn new(global_state_receiver: GuardedGlobalReceiverType) -> Self {
+    pub fn new(
+        guarded_global_state: Arc<std::sync::Mutex<GlobalState>>,
+    ) -> Result<Self, ProducerErr> {
+
+        let global_state_lock = guarded_global_state
+            .lock()
+            .map_err(|_| ProducerErr::GlobalStateRxNoneErr)?;
+
+        let global_state_receiver = global_state_lock.quarded_global_state_rx.clone();
+
         let mut handlers: Vec<JoinHandle<()>> = Vec::new();
         let (producer_tx, producer_rx) = channel::<ProducerChannelData>();
 
@@ -44,7 +59,6 @@ impl Producer {
                 let mut producer_task = ProducerTask::new(global_state_receiver, producer_tx_clone);
                 producer_task.run();
             };
-            // let worker = Worker::new(task);
             let handle = thread::spawn(task);
 
             handlers.push(handle);
@@ -52,10 +66,10 @@ impl Producer {
 
         let garded_producer_rx = Arc::new(Mutex::new(producer_rx));
 
-        Producer {
+        Ok(Producer {
             handlers,
             garded_producer_rx,
-        }
+        })
     }
 
     pub fn check_threads_finished(&self) -> bool {

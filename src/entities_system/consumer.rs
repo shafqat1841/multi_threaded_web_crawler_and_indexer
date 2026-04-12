@@ -23,7 +23,7 @@ impl Consumer {
         let guarded_global_state_clone = guarded_global_state.clone();
         let task = move || {
             let consumer_task =
-                ConsumerTask::new(guarded_global_state_clone, producer_rx_clone.clone());
+                ConsumerTask::new(guarded_global_state_clone, producer_rx_clone);
             consumer_task.run();
         };
 

@@ -42,15 +42,12 @@ pub struct GlobalState {
 
 impl GlobalState {
     pub fn new() -> Self {
-        // let (global_state_tx, global_state_rx) = channel::<Option<GuardedUrlDataType>>();
         let (global_state_tx, global_state_rx) = channel::<GlobalStateChannelData>();
 
         let mut urls_data: HashMap<String, Arc<Mutex<UrlData>>> = HashMap::new();
         let url_visited = 0;
         INITIAL_URLS.iter().for_each(|url| {
             let url_data = UrlData {
-                // url: url.to_string(),
-                // content: String::new(),
                 visited: false,
                 in_processing: false,
             };
@@ -58,14 +55,11 @@ impl GlobalState {
             urls_data.insert(url.to_string(), url_data_quarded);
         });
 
-        // let urls_data_gauarded = Arc::new(Mutex::new(urls_data));
-
         let quarded_global_state_rx = Arc::new(Mutex::new(global_state_rx));
         let garded_url_visited = Arc::new(Mutex::new(url_visited));
 
         GlobalState {
             urls_data,
-            // urls_data_gauarded,
             url_visited: garded_url_visited,
             global_state_tx,
             quarded_global_state_rx,
