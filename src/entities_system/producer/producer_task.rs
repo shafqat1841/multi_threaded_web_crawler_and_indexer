@@ -1,10 +1,10 @@
 use std::{
-    sync::{Arc, Mutex, mpsc::Sender},
+    sync::{Arc, Mutex},
     thread::sleep,
     time::Duration,
 };
 
-use crossbeam::channel::TryRecvError;
+use crossbeam::channel::{Sender, TryRecvError};
 
 use crate::{
     constants::SLEEP_DURATION,

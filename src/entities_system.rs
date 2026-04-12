@@ -43,7 +43,7 @@ impl Entities {
 
         let consumer = Consumer::new(
             guarded_global_state.clone(),
-            producer.garded_producer_rx.clone(),
+            producer.producer_rx.clone(),
         );
 
         Ok(Entities {

@@ -1,13 +1,11 @@
 use std::{
-    sync::{
-        Arc, Mutex,
-        mpsc::{Receiver, channel},
-    },
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
 mod producer_task;
 
+use crossbeam::channel::{Receiver, unbounded};
 use thiserror::Error;
 
 use crate::{
@@ -29,7 +27,7 @@ pub enum ProducerChannelData {
 #[derive(Debug)]
 pub struct Producer {
     pub handlers: Vec<JoinHandle<()>>,
-    pub garded_producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
+    pub producer_rx: Receiver<ProducerChannelData>,
 }
 
 #[derive(Error, Debug)]
@@ -46,22 +44,17 @@ impl Producer {
             .lock()
             .map_err(|_| ProducerErr::GlobalStateRxNoneErr)?;
 
-
         let mut handlers: Vec<JoinHandle<()>> = Vec::new();
-        let (producer_tx, producer_rx) = channel::<ProducerChannelData>();
-
+        let (producer_tx, producer_rx) = unbounded::<ProducerChannelData>();
         for _ in 0..THREAD_COUNT {
             let rx = global_state_lock.global_state_rx_array.pop();
 
             let global_state_receiver = match rx {
-                None => {
-                    return Err(ProducerErr::GlobalStateRxNoneErr)
-                },
-                Some(value) => value
+                None => return Err(ProducerErr::GlobalStateRxNoneErr),
+                Some(value) => value,
             };
 
             let producer_tx_clone = producer_tx.clone();
-            // let global_state_receiver = global_state_receiver.clone();
             let task = move || {
                 let mut producer_task = ProducerTask::new(global_state_receiver, producer_tx_clone);
                 producer_task.run();
@@ -71,11 +64,9 @@ impl Producer {
             handlers.push(handle);
         }
 
-        let garded_producer_rx = Arc::new(Mutex::new(producer_rx));
-
         Ok(Producer {
             handlers,
-            garded_producer_rx,
+            producer_rx,
         })
     }
 

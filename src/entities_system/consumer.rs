@@ -1,9 +1,11 @@
 mod consumer_task;
 
 use std::{
-    sync::{Arc, Mutex, mpsc::Receiver},
+    sync::{Arc, Mutex},
     thread::{self, JoinHandle},
 };
+
+use crossbeam::channel::Receiver;
 
 use crate::entities_system::{
     app_global_state::GlobalState, consumer::consumer_task::ConsumerTask,
@@ -17,7 +19,7 @@ pub struct Consumer {
 impl Consumer {
     pub fn new(
         guarded_global_state: Arc<Mutex<GlobalState>>,
-        producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
+        producer_rx: Receiver<ProducerChannelData>,
     ) -> Self {
         let producer_rx_clone = producer_rx.clone();
         let guarded_global_state_clone = guarded_global_state.clone();

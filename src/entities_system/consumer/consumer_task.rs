@@ -1,7 +1,6 @@
-use std::sync::{
-    Arc, Mutex,
-    mpsc::{Receiver, TryRecvError},
-};
+use std::sync::{Arc, Mutex};
+
+use crossbeam::channel::{Receiver, TryRecvError};
 
 use crate::entities_system::{
     app_global_state::{GlobalState, UrlData},
@@ -9,14 +8,14 @@ use crate::entities_system::{
 };
 
 pub struct ConsumerTask {
-    producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
+    producer_rx: Receiver<ProducerChannelData>,
     guarded_global_state: Arc<Mutex<GlobalState>>,
 }
 
 impl ConsumerTask {
     pub fn new(
         guarded_global_state: Arc<Mutex<GlobalState>>,
-        producer_rx: Arc<Mutex<Receiver<ProducerChannelData>>>,
+        producer_rx: Receiver<ProducerChannelData>,
     ) -> Self {
         ConsumerTask {
             producer_rx,
@@ -27,21 +26,9 @@ impl ConsumerTask {
     pub fn run(&self) {
         println!("Consumer loop start");
         loop {
-            let rec_lock = {
-                match self.producer_rx.lock() {
-                    Ok(lock_res) => lock_res,
-                    Err(err) => {
-                        eprintln!("lock_res error: {:?}", err);
-                        break;
-                    }
-                }
-            };
-
-            let rec_res = match rec_lock.try_recv() {
+            let rec_res = match self.producer_rx.try_recv() {
                 Ok(value) => value,
                 Err(err) => {
-                    // eprintln!("rec_lock_res_recv error: {:?}", err);
-                    // println!("rec_lock_res_recv error: {:?}", err);
                     if err == TryRecvError::Empty {
                         continue;
                     }
@@ -76,8 +63,6 @@ impl ConsumerTask {
         let new_data: UrlData = UrlData {
             in_processing: false,
             visited: false,
-            // content: "".to_string(),
-            // url: val.clone(),
         };
 
         let arc_data = Arc::new(Mutex::new(new_data));
