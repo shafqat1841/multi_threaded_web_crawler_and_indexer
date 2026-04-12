@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crossbeam::channel::{Receiver, SendError, SendTimeoutError, Sender, unbounded};
+use crossbeam::channel::{Receiver, SendError, Sender, unbounded};
 
 use crate::constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS, THREAD_COUNT};
 
@@ -22,7 +22,6 @@ pub enum GlobalStateChannelData {
 }
 
 type GlobalSenderType = Sender<GlobalStateChannelData>;
-pub type GlobalReceiverType = Receiver<GlobalStateChannelData>;
 
 pub type GuardedGlobalReceiverType = Receiver<GlobalStateChannelData>;
 
