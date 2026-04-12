@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        Arc, Mutex, MutexGuard, PoisonError,
+        Arc, Mutex,
         mpsc::{Receiver, channel},
     },
     thread::{self, JoinHandle},

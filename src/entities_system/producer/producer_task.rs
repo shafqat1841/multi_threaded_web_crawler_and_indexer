@@ -57,7 +57,6 @@ impl ProducerTask {
     pub fn run(&mut self) {
         println!("Producer thread started");
         loop {
-            // let global_state_data = self.get_global_state_data(&self.global_state_receiver);
             let global_state_data = self.get_global_state_data();
 
             let ok_data = match global_state_data {
