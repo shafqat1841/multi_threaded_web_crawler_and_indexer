@@ -45,7 +45,9 @@ impl Producer {
             .map_err(|_| ProducerErr::GlobalStateRxNoneErr)?;
 
         let mut handlers: Vec<JoinHandle<()>> = Vec::new();
+
         let (producer_tx, producer_rx) = unbounded::<ProducerChannelData>();
+       
         for _ in 0..THREAD_COUNT {
             let rx = global_state_lock.global_state_rx_array.pop();
 

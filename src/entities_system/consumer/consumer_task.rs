@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crossbeam::channel::{Receiver, TryRecvError};
+use crossbeam::channel::{Receiver};
 
 use crate::entities_system::{
     app_global_state::{GlobalState, UrlData},
@@ -26,12 +26,9 @@ impl ConsumerTask {
     pub fn run(&self) {
         println!("Consumer loop start");
         loop {
-            let rec_res = match self.producer_rx.try_recv() {
+            let rec_res = match self.producer_rx.recv() {
                 Ok(value) => value,
-                Err(err) => {
-                    if err == TryRecvError::Empty {
-                        continue;
-                    }
+                Err(_) => {
                     break;
                 }
             };

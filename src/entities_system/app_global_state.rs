@@ -57,7 +57,6 @@ impl GlobalState {
             urls_data.insert(url.to_string(), url_data_quarded);
         });
 
-        // let quarded_global_state_rx = Arc::new(Mutex::new(global_state_rx));
         let garded_url_visited = Arc::new(Mutex::new(url_visited));
 
         GlobalState {

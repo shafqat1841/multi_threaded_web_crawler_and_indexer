@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use crossbeam::channel::{Sender, TryRecvError};
+use crossbeam::channel::{Sender};
 
 use crate::{
     constants::SLEEP_DURATION,
@@ -17,8 +17,6 @@ use crate::{
 #[derive(Debug)]
 enum GetGlobalStateDataErr {
     DisconnectErr,
-    PoisonErr,
-    EmptyErr,
 }
 
 pub struct ProducerTask {
@@ -64,14 +62,7 @@ impl ProducerTask {
             let ok_data = match global_state_data {
                 Ok(value) => value,
                 Err(err) => match err {
-                    GetGlobalStateDataErr::EmptyErr => {
-                        continue;
-                    }
                     GetGlobalStateDataErr::DisconnectErr => {
-                        println!("  Producer thread encountered an error: {:?}", err);
-                        break;
-                    }
-                    GetGlobalStateDataErr::PoisonErr => {
                         println!("  Producer thread encountered an error: {:?}", err);
                         break;
                     }
@@ -92,15 +83,9 @@ impl ProducerTask {
     }
 
     fn get_global_state_data(&self) -> Result<GlobalStateChannelData, GetGlobalStateDataErr> {
-
-        let res = match self.global_state_receiver.try_recv() {
+        let res = match self.global_state_receiver.recv() {
             Ok(value) => value,
-            Err(err) => {
-                if err == TryRecvError::Empty {
-                    // return Ok(GlobalStateChannelData::EndProcessing);
-                    return Err(GetGlobalStateDataErr::EmptyErr);
-                }
-
+            Err(_) => {
                 return Err(GetGlobalStateDataErr::DisconnectErr);
             }
         };
