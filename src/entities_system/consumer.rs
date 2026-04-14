@@ -18,15 +18,21 @@ pub struct Consumer {
 
 impl Consumer {
     pub fn new(
-        guarded_global_state: Arc<Mutex<GlobalState>>,
+        guarded_global_state: Arc<GlobalState>,
         producer_rx: Receiver<ProducerChannelData>,
     ) -> Self {
         let producer_rx_clone = producer_rx.clone();
         let guarded_global_state_clone = guarded_global_state.clone();
         let task = move || {
-            let consumer_task =
-                ConsumerTask::new(guarded_global_state_clone, producer_rx_clone);
-            consumer_task.run();
+
+            match ConsumerTask::new(guarded_global_state_clone, producer_rx_clone) {
+                Ok(consumer_task) => {
+                    consumer_task.run();
+                }
+                Err(err) => {
+                    eprintln!("error: {}", err);
+                }
+            }
         };
 
         let handler = thread::Builder::new()

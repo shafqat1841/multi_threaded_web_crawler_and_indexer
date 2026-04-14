@@ -1,26 +1,29 @@
 use std::sync::{Arc, Mutex};
 
-use crossbeam::channel::{Receiver};
+use crossbeam::channel::Receiver;
+use dashmap::DashMap;
 
 use crate::entities_system::{
     app_global_state::{GlobalState, UrlData},
-    producer::ProducerChannelData,
+    producer::{ProducerChannelData, ProducerErr},
 };
 
 pub struct ConsumerTask {
     producer_rx: Receiver<ProducerChannelData>,
-    guarded_global_state: Arc<Mutex<GlobalState>>,
+    urls_data: Arc<DashMap<String, UrlData>>,
 }
 
 impl ConsumerTask {
     pub fn new(
-        guarded_global_state: Arc<Mutex<GlobalState>>,
+        guarded_global_state: Arc<GlobalState>,
         producer_rx: Receiver<ProducerChannelData>,
-    ) -> Self {
-        ConsumerTask {
+    ) -> Result<Self, ProducerErr> {
+        let urls_data = guarded_global_state.urls_data.clone();
+
+        Ok(ConsumerTask {
             producer_rx,
-            guarded_global_state,
-        }
+            urls_data
+        })
     }
 
     pub fn run(&self) {
@@ -29,6 +32,7 @@ impl ConsumerTask {
             let rec_res = match self.producer_rx.recv() {
                 Ok(value) => value,
                 Err(_) => {
+                    println!("consumer loop break here 1");
                     break;
                 }
             };
@@ -47,8 +51,9 @@ impl ConsumerTask {
                         }
                     });
                 }
-
+                
                 ProducerChannelData::EndProcessing => {
+                    println!("consumer loop break here 2");
                     break;
                 }
             }
@@ -62,17 +67,18 @@ impl ConsumerTask {
             visited: false,
         };
 
-        let arc_data = Arc::new(Mutex::new(new_data));
+        self.urls_data.insert(val, new_data);
 
-        match self.guarded_global_state.lock() {
-            Err(err) => {
-                println!("guarded_global_state.lock error: {}", err)
-            }
-            Ok(mut global_state) => {
-                let urls_data = &mut global_state.urls_data;
+        // match self.guarded_global_state.lock() {
+        //     Err(err) => {
+        //         println!("guarded_global_state.lock error: {}", err)
+        //     }
+        //     Ok(mut global_state) => {
+        //         let urls_data = &mut global_state.urls_data;
 
-                urls_data.insert(val, arc_data);
-            }
-        }
+        //         // urls_data.insert(val, arc_data);
+        //         urls_data.insert(val, new_data);
+        //     }
+        // }
     }
 }

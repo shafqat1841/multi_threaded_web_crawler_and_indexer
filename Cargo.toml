@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 crossbeam = "0.8.4"
+dashmap = "6.1.0"
 thiserror = "2.0.18"

@@ -4,13 +4,17 @@ use std::{
     time::Duration,
 };
 
-use crossbeam::channel::{Sender};
+use crossbeam::channel::Sender;
+use dashmap::DashMap;
 
 use crate::{
     constants::SLEEP_DURATION,
     entities_system::{
-        app_global_state::{GlobalStateChannelData, GuardedGlobalReceiverType, UrlData},
-        producer::{NewUrls, ProducerChannelData},
+        app_global_state::{
+            GlobalState, GlobalStateChannelData, GuardedGlobalReceiverType, GuardedUrlDataType,
+            UrlData,
+        },
+        producer::{NewUrls, ProducerChannelData, ProducerErr},
     },
 };
 
@@ -20,16 +24,19 @@ enum GetGlobalStateDataErr {
 }
 
 pub struct ProducerTask {
+    urls_data: Arc<DashMap<String, UrlData>>,
     global_state_receiver: GuardedGlobalReceiverType,
     new_urls: Vec<String>,
     producer_tx: Sender<ProducerChannelData>,
+    threat_name: String
 }
 
 impl ProducerTask {
     pub fn new(
-        global_state_receiver: GuardedGlobalReceiverType,
+        guarded_global_state: Arc<GlobalState>,
         producer_tx: Sender<ProducerChannelData>,
-    ) -> Self {
+        threat_name: String
+    ) -> Result<Self, ProducerErr> {
         let new_urls: [String; 15] = [
             "https://www.example2.com".to_string(),
             "https://www.rust-lang2.org".to_string(),
@@ -47,11 +54,35 @@ impl ProducerTask {
             "https://www.github4.com".to_string(),
             "https://www.stackoverflow4.com".to_string(),
         ];
-        ProducerTask {
+        let (urls_data, global_state_receiver) = {
+            let rx = {
+                let mut rx_array = guarded_global_state
+                    .global_state_rx_array
+                    .lock()
+                    .map_err(|_| ProducerErr::GlobalStateRxNoneErr)?;
+
+                let res = rx_array.pop();
+
+                res
+            };
+
+            let global_state_receiver = match rx {
+                None => return Err(ProducerErr::GlobalStateRxNoneErr),
+                Some(value) => value,
+            };
+
+            let urls_data = guarded_global_state.urls_data.clone();
+
+            (urls_data, global_state_receiver)
+        };
+
+        Ok(ProducerTask {
+            urls_data,
             global_state_receiver,
             new_urls: new_urls.to_vec(),
             producer_tx,
-        }
+            threat_name,
+        })
     }
 
     pub fn run(&mut self) {
@@ -85,7 +116,8 @@ impl ProducerTask {
     fn get_global_state_data(&self) -> Result<GlobalStateChannelData, GetGlobalStateDataErr> {
         let res = match self.global_state_receiver.recv() {
             Ok(value) => value,
-            Err(_) => {
+            Err(err) => {
+                println!("file: producer_task.rs ~ line 127 ~ Err ~ err : {} ", err);
                 return Err(GetGlobalStateDataErr::DisconnectErr);
             }
         };
@@ -93,28 +125,41 @@ impl ProducerTask {
         Ok(res)
     }
 
-    fn update_received_data(&mut self, data: (Arc<Mutex<UrlData>>, Arc<Mutex<isize>>)) {
+    fn update_received_data(&mut self, data: GuardedUrlDataType) {
         sleep(Duration::from_millis(SLEEP_DURATION));
 
         let send_data_res = self.send_data_to_consumer();
 
+        // println!("file: producer_task.rs ~ line 150 ~ ifletSome ~ self.threat_name : {} ", self.threat_name);
         match send_data_res {
             Ok(_) => {
-                {
-                    let mut received_value_0 = data.0.lock().unwrap();
-
-                    received_value_0.visited = true;
-                }
-                {
-                    let mut received_value_1 = data.1.lock().unwrap();
-                    *received_value_1 += 1;
-                }
+                let unvisited_url_key = data.0;
+                if let Some(mut value) = self.urls_data.get_mut(&unvisited_url_key) {
+                    println!("file: producer_task.rs ~ line 135 ~ ifletSome ~ value : {} ", value.key());
+                    value.visited = true;
+                    {
+                        let url_visited = data.1;
+                        let mut url_visited_value = url_visited.lock().unwrap();
+                        *url_visited_value += 1;
+                    }
+                };
             }
             Err(err) => {
                 println!("{}", err);
-                let mut received_value_0 = data.0.lock().unwrap();
 
-                received_value_0.in_processing = false;
+                let unvisited_url_key = data.0;
+                if let Some(mut value) = self.urls_data.get_mut(&unvisited_url_key) {
+                    value.in_processing = false;
+                      {
+                        let url_visited = data.1;
+                        let mut url_visited_value = url_visited.lock().unwrap();
+                        *url_visited_value -= 1;
+                        println!(
+                            "file: producer_task.rs ~ line 145 ~ Ok ~ *url_visited_value : {} ",
+                            *url_visited_value
+                        );
+                    }
+                };
             }
         }
     }
