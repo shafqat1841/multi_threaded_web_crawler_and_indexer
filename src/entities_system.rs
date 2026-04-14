@@ -4,7 +4,7 @@ mod producer;
 
 use thiserror::Error;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::entities_system::{
     app_global_state::GlobalState,
@@ -24,14 +24,6 @@ pub enum EntitiesErr {
     ProducerErr(#[from] ProducerErr),
 }
 
-#[derive(Error, Debug)]
-pub enum EntitiesRunErr {
-    #[error(
-        "An error occured during locking of global state receiver when the process was running"
-    )]
-    MutexPoisonErr,
-}
-
 impl Entities {
     pub fn new() -> Result<Self, EntitiesErr> {
         println!("Initializing the multi-threaded web crawler and indexer...");
@@ -49,19 +41,18 @@ impl Entities {
         })
     }
 
-    pub fn run(self) -> Result<(), EntitiesRunErr> {
+    pub fn run(self) {
         let global_state: Arc<GlobalState> = self.global_state;
         let mut producer = self.producer;
         let mut consumer = Some(self.consumer);
 
         println!("Main run started");
         loop {
-             let _ = global_state.send_data_to_producer();
+            let _ = global_state.send_data_to_producer();
 
-             let all_urls_visiting_done = global_state.is_all_urls_visiting_done();
+            let all_urls_visiting_done = global_state.is_all_urls_visiting_done();
             if all_urls_visiting_done {
                 if let Err(_) = global_state.send_end_process_signal() {
-                    // continue;
                     break;
                 }
 
@@ -98,6 +89,5 @@ impl Entities {
         }
 
         println!("Main ended");
-        Ok(())
     }
 }

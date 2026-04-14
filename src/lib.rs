@@ -10,11 +10,6 @@ pub fn run() {
         Err(err) => {
             println!("{}", err)
         }
-        Ok(entities) => match entities.run() {
-            Err(err) => {
-                println!("{}",err)
-            }
-            _ => {}
-        },
+        Ok(entities) => entities.run(),
     };
 }

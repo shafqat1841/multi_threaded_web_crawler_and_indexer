@@ -1,8 +1,4 @@
-use std::{
-    sync::{Arc, Mutex},
-    thread::sleep,
-    time::Duration,
-};
+use std::{sync::Arc, thread::sleep, time::Duration};
 
 use crossbeam::channel::Sender;
 use dashmap::DashMap;
@@ -110,7 +106,7 @@ impl ProducerTask {
                 }
             };
         }
-        println!("Producer thread ended");
+        println!("{} ended", self.threat_name);
     }
 
     fn get_global_state_data(&self) -> Result<GlobalStateChannelData, GetGlobalStateDataErr> {
@@ -130,7 +126,6 @@ impl ProducerTask {
 
         let send_data_res = self.send_data_to_consumer();
 
-        // println!("file: producer_task.rs ~ line 150 ~ ifletSome ~ self.threat_name : {} ", self.threat_name);
         match send_data_res {
             Ok(_) => {
                 let unvisited_url_key = data.0;

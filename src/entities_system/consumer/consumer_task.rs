@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crossbeam::channel::Receiver;
 use dashmap::DashMap;
@@ -22,7 +22,7 @@ impl ConsumerTask {
 
         Ok(ConsumerTask {
             producer_rx,
-            urls_data
+            urls_data,
         })
     }
 
@@ -51,7 +51,7 @@ impl ConsumerTask {
                         }
                     });
                 }
-                
+
                 ProducerChannelData::EndProcessing => {
                     println!("consumer loop break here 2");
                     break;

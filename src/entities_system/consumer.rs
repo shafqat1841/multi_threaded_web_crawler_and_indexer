@@ -1,7 +1,7 @@
 mod consumer_task;
 
 use std::{
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
@@ -23,15 +23,12 @@ impl Consumer {
     ) -> Self {
         let producer_rx_clone = producer_rx.clone();
         let guarded_global_state_clone = guarded_global_state.clone();
-        let task = move || {
-
-            match ConsumerTask::new(guarded_global_state_clone, producer_rx_clone) {
-                Ok(consumer_task) => {
-                    consumer_task.run();
-                }
-                Err(err) => {
-                    eprintln!("error: {}", err);
-                }
+        let task = move || match ConsumerTask::new(guarded_global_state_clone, producer_rx_clone) {
+            Ok(consumer_task) => {
+                consumer_task.run();
+            }
+            Err(err) => {
+                eprintln!("error: {}", err);
             }
         };
 

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crossbeam::channel::{Receiver, SendError, Sender, unbounded};
-use dashmap::{DashMap, mapref::multiple::RefMulti};
+use dashmap::DashMap;
 
 use crate::constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS, THREAD_COUNT};
 
@@ -93,9 +93,6 @@ impl GlobalState {
             }
         };
 
-        // println!("After getting key_clone: {:?}", unvisited_url);
-
-
         let unvisited_url_clone = unvisited_url.clone();
 
         let send_data = GuardedUrlDataType(unvisited_url_clone, Arc::clone(&self.url_visited));
@@ -130,15 +127,12 @@ impl GlobalState {
     }
 
     fn are_all_url_visited(&self) -> bool {
-        let res = self
-            .urls_data
-            .iter()
-            .all(|url_data| {
-                let visited = url_data.value().visited;
-                let in_processing = url_data.value().in_processing;
-                let res = visited && in_processing;
-                res
-            });
+        let res = self.urls_data.iter().all(|url_data| {
+            let visited = url_data.value().visited;
+            let in_processing = url_data.value().in_processing;
+            let res = visited && in_processing;
+            res
+        });
         res
     }
 
