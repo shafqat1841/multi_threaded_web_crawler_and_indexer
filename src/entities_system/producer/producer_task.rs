@@ -28,14 +28,14 @@ pub struct ProducerTask {
     global_state_receiver: GuardedGlobalReceiverType,
     new_urls: Vec<String>,
     producer_tx: Sender<ProducerChannelData>,
-    threat_name: String
+    threat_name: String,
 }
 
 impl ProducerTask {
     pub fn new(
         guarded_global_state: Arc<GlobalState>,
         producer_tx: Sender<ProducerChannelData>,
-        threat_name: String
+        threat_name: String,
     ) -> Result<Self, ProducerErr> {
         let new_urls: [String; 15] = [
             "https://www.example2.com".to_string(),
@@ -135,31 +135,35 @@ impl ProducerTask {
             Ok(_) => {
                 let unvisited_url_key = data.0;
                 if let Some(mut value) = self.urls_data.get_mut(&unvisited_url_key) {
-                    println!("file: producer_task.rs ~ line 135 ~ ifletSome ~ value : {} ", value.key());
-                    value.visited = true;
-                    {
-                        let url_visited = data.1;
-                        let mut url_visited_value = url_visited.lock().unwrap();
-                        *url_visited_value += 1;
+                    if !value.value().visited {
+                        println!(
+                            "file: producer_task.rs ~ line 135 ~ ifletSome ~ value : {} ",
+                            value.key()
+                        );
+                        value.value_mut().visited = true;
+                        {
+                            let url_visited = data.1;
+                            match url_visited.lock() {
+                                Ok(mut url_visited_value) => {
+                                    if *url_visited_value < 20 {
+                                        *url_visited_value += 1;
+                                        println!(
+                                            "file: producer_task.rs ~ line 152 ~ ifletSome ~ url_visited_value : {} ",
+                                            url_visited_value
+                                        );
+                                    }
+                                }
+                                Err(err) => {
+                                    value.visited = false;
+                                    println!("error: {}", err)
+                                }
+                            }
+                        }
                     }
                 };
             }
             Err(err) => {
                 println!("{}", err);
-
-                let unvisited_url_key = data.0;
-                if let Some(mut value) = self.urls_data.get_mut(&unvisited_url_key) {
-                    value.in_processing = false;
-                      {
-                        let url_visited = data.1;
-                        let mut url_visited_value = url_visited.lock().unwrap();
-                        *url_visited_value -= 1;
-                        println!(
-                            "file: producer_task.rs ~ line 145 ~ Ok ~ *url_visited_value : {} ",
-                            *url_visited_value
-                        );
-                    }
-                };
             }
         }
     }
