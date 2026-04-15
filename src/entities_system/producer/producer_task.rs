@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread::sleep, time::Duration};
+use std::{sync::{Arc, atomic::Ordering}, thread::sleep, time::Duration};
 
 use crossbeam::channel::Sender;
 use dashmap::DashMap;
@@ -138,21 +138,11 @@ impl ProducerTask {
                         value.value_mut().visited = true;
                         {
                             let url_visited = data.1;
-                            match url_visited.lock() {
-                                Ok(mut url_visited_value) => {
-                                    if *url_visited_value < 20 {
-                                        *url_visited_value += 1;
-                                        println!(
-                                            "file: producer_task.rs ~ line 152 ~ ifletSome ~ url_visited_value : {} ",
-                                            url_visited_value
-                                        );
-                                    }
-                                }
-                                Err(err) => {
-                                    value.visited = false;
-                                    println!("error: {}", err)
-                                }
-                            }
+                            url_visited.fetch_add(1, Ordering::Relaxed);
+                            println!(
+                                "file: producer_task.rs ~ line 152 ~ ifletSome ~ url_visited_value : {:?} ",
+                                url_visited
+                            );
                         }
                     }
                 };

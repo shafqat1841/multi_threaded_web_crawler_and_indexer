@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::{AtomicIsize, Ordering}};
 
 use crossbeam::channel::{Receiver, SendError, Sender, unbounded};
 use dashmap::DashMap;
@@ -14,7 +14,7 @@ pub struct UrlData {
 }
 
 #[derive(Debug)]
-pub struct GuardedUrlDataType(pub String, pub Arc<Mutex<isize>>);
+pub struct GuardedUrlDataType(pub String, pub Arc<AtomicIsize>);
 
 #[derive(Debug)]
 pub enum GlobalStateChannelData {
@@ -31,7 +31,7 @@ pub struct GlobalState {
     // The Coordinator (Shared State): A central record that keeps track of which URLs have already been visited
     // so you don't crawl the same page twice.
     pub urls_data: Arc<DashMap<String, UrlData>>,
-    pub url_visited: Arc<Mutex<isize>>,
+    pub url_visited: Arc<AtomicIsize>,
     pub global_state_tx: GlobalSenderType,
     pub global_state_rx_array: Mutex<Vec<Receiver<GlobalStateChannelData>>>,
 }
@@ -57,7 +57,7 @@ impl GlobalState {
             urls_data.insert(url.to_string(), url_data);
         });
 
-        let garded_url_visited = Arc::new(Mutex::new(url_visited));
+        let garded_url_visited = Arc::new(AtomicIsize::new(url_visited));
 
         let urls_data_arc = Arc::new(urls_data);
 
@@ -122,7 +122,7 @@ impl GlobalState {
     }
 
     fn is_max_url_visited(&self) -> bool {
-        let url_visited = self.url_visited.lock().unwrap().clone();
+        let url_visited = self.url_visited.load(Ordering::Relaxed);
         url_visited >= MAX_URLS_TO_PROCESS
     }
 
