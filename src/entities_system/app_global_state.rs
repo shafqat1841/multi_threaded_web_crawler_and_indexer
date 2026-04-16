@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex, atomic::{AtomicIsize, Ordering}};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicIsize, Ordering},
+};
 
 use crossbeam::channel::{Receiver, SendError, Sender, unbounded};
 use dashmap::DashMap;
@@ -7,10 +10,7 @@ use crate::constants::{INITIAL_URLS, MAX_URLS_TO_PROCESS, THREAD_COUNT};
 
 #[derive(Debug)]
 pub struct UrlData {
-    // pub url: String,
-    // pub content: String,
     pub visited: bool,
-    pub in_processing: bool,
 }
 
 #[derive(Debug)]
@@ -30,6 +30,7 @@ pub type GuardedGlobalReceiverType = Receiver<GlobalStateChannelData>;
 pub struct GlobalState {
     // The Coordinator (Shared State): A central record that keeps track of which URLs have already been visited
     // so you don't crawl the same page twice.
+    pub urls_data_vec: Arc<Mutex<Vec<String>>>,
     pub urls_data: Arc<DashMap<String, UrlData>>,
     pub url_visited: Arc<AtomicIsize>,
     pub global_state_tx: GlobalSenderType,
@@ -48,13 +49,12 @@ impl GlobalState {
         }
 
         let urls_data: DashMap<String, UrlData> = DashMap::new();
+        let mut urls_data_vec: Vec<String> = Vec::new();
         let url_visited = 0;
         INITIAL_URLS.iter().for_each(|url| {
-            let url_data = UrlData {
-                visited: false,
-                in_processing: false,
-            };
+            let url_data = UrlData { visited: false };
             urls_data.insert(url.to_string(), url_data);
+            urls_data_vec.push(url.to_string());
         });
 
         let garded_url_visited = Arc::new(AtomicIsize::new(url_visited));
@@ -62,51 +62,41 @@ impl GlobalState {
         let urls_data_arc = Arc::new(urls_data);
 
         GlobalState {
+            urls_data_vec: Arc::new(Mutex::new(urls_data_vec)),
             urls_data: urls_data_arc,
             url_visited: garded_url_visited,
             global_state_tx,
-            // quarded_global_state_rx,
             global_state_rx_array: Mutex::new(global_state_rx_array),
         }
     }
 
-    pub fn get_unvisited_url(&self) -> Option<String> {
-        let unvisited_url = self.urls_data.iter_mut().find(|item| {
-            let item_value = item.value();
-
-            let res = !item_value.visited && !item_value.in_processing;
-
-            res
-        });
-        let value = unvisited_url.map(|mut item| {
-            item.value_mut().in_processing = true;
-            item.key().clone()
-        });
-        value
-    }
-
     pub fn send_data_to_producer(&self) -> Result<(), &str> {
-        let unvisited_url = match self.get_unvisited_url() {
-            Some(found) => found,
-            None => {
-                return Ok(());
+        match self.urls_data_vec.lock() {
+            Err(err) => {
+                eprintln!("Channel send failed for {:?}", err);
             }
-        };
+            Ok(mut lock) => {
+                if !lock.is_empty() {
+                    for url in lock.drain(..) {
+                        let unvisited_url_value = url;
 
-        let unvisited_url_clone = unvisited_url.clone();
+                        let unvisited_url_value_clone = unvisited_url_value.clone();
 
-        let send_data = GuardedUrlDataType(unvisited_url_clone, Arc::clone(&self.url_visited));
+                        let send_data = GuardedUrlDataType(
+                            unvisited_url_value_clone,
+                            Arc::clone(&self.url_visited),
+                        );
 
-        if let Err(e) = self
-            .global_state_tx
-            .send(GlobalStateChannelData::ContinueProcessing(send_data))
-        {
-            eprintln!("Channel send failed for {}: {:?}", unvisited_url, e);
-
-            if let Some(mut value) = self.urls_data.get_mut(&unvisited_url) {
-                value.in_processing = false;
-            };
-        };
+                        if let Err(e) = self
+                            .global_state_tx
+                            .send(GlobalStateChannelData::ContinueProcessing(send_data))
+                        {
+                            eprintln!("Channel send failed for {}: {:?}", unvisited_url_value, e);
+                        };
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -129,8 +119,7 @@ impl GlobalState {
     fn are_all_url_visited(&self) -> bool {
         let res = self.urls_data.iter().all(|url_data| {
             let visited = url_data.value().visited;
-            let in_processing = url_data.value().in_processing;
-            let res = visited && in_processing;
+            let res = visited;
             res
         });
         res
