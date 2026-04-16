@@ -1,4 +1,11 @@
-use std::{sync::{Arc, atomic::Ordering}, thread::sleep, time::Duration};
+use std::{
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicIsize, Ordering},
+    },
+    thread::sleep,
+    time::Duration,
+};
 
 use crossbeam::channel::Sender;
 use dashmap::DashMap;
@@ -14,15 +21,10 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
-enum GetGlobalStateDataErr {
-    DisconnectErr,
-}
-
 pub struct ProducerTask {
     urls_data: Arc<DashMap<String, UrlData>>,
     global_state_receiver: GuardedGlobalReceiverType,
-    new_urls: Vec<String>,
+    new_urls: Arc<Mutex<Vec<String>>>,
     producer_tx: Sender<ProducerChannelData>,
     threat_name: String,
 }
@@ -32,24 +34,8 @@ impl ProducerTask {
         guarded_global_state: Arc<GlobalState>,
         producer_tx: Sender<ProducerChannelData>,
         threat_name: String,
+        new_urls_gearded: Arc<Mutex<Vec<String>>>,
     ) -> Result<Self, ProducerErr> {
-        let new_urls: [String; 15] = [
-            "https://www.example2.com".to_string(),
-            "https://www.rust-lang2.org".to_string(),
-            "https://www.wikipedia2.org".to_string(),
-            "https://www.github2.com".to_string(),
-            "https://www.stackoverflow2.com".to_string(),
-            "https://www.example3.com".to_string(),
-            "https://www.rust-lang3.org".to_string(),
-            "https://www.wikipedia3.org".to_string(),
-            "https://www.github3.com".to_string(),
-            "https://www.stackoverflow3.com".to_string(),
-            "https://www.example4.com".to_string(),
-            "https://www.rust-lang4.org".to_string(),
-            "https://www.wikipedia4.org".to_string(),
-            "https://www.github4.com".to_string(),
-            "https://www.stackoverflow4.com".to_string(),
-        ];
         let (urls_data, global_state_receiver) = {
             let rx = {
                 let mut rx_array = guarded_global_state
@@ -75,7 +61,7 @@ impl ProducerTask {
         Ok(ProducerTask {
             urls_data,
             global_state_receiver,
-            new_urls: new_urls.to_vec(),
+            new_urls: new_urls_gearded,
             producer_tx,
             threat_name,
         })
@@ -84,21 +70,17 @@ impl ProducerTask {
     pub fn run(&mut self) {
         println!("Producer thread started");
         loop {
-            let global_state_data = self.get_global_state_data();
-
-            let ok_data = match global_state_data {
+            let ok_data = match self.global_state_receiver.recv() {
                 Ok(value) => value,
-                Err(err) => match err {
-                    GetGlobalStateDataErr::DisconnectErr => {
-                        println!("  Producer thread encountered an error: {:?}", err);
-                        break;
-                    }
-                },
+                Err(err) => {
+                    println!("Producer thread encountered an error: : {} ", err);
+                    break;
+                }
             };
 
             match ok_data {
                 GlobalStateChannelData::EndProcessing => {
-                    println!("Producer thread received EndProcessing signal");
+                    println!("{} received EndProcessing signal", self.threat_name);
                     break;
                 }
                 GlobalStateChannelData::ContinueProcessing(data) => {
@@ -109,41 +91,21 @@ impl ProducerTask {
         println!("{} ended", self.threat_name);
     }
 
-    fn get_global_state_data(&self) -> Result<GlobalStateChannelData, GetGlobalStateDataErr> {
-        let res = match self.global_state_receiver.recv() {
-            Ok(value) => value,
-            Err(err) => {
-                println!("file: producer_task.rs ~ line 127 ~ Err ~ err : {} ", err);
-                return Err(GetGlobalStateDataErr::DisconnectErr);
-            }
-        };
-
-        Ok(res)
-    }
-
     fn update_received_data(&mut self, data: GuardedUrlDataType) {
         sleep(Duration::from_millis(SLEEP_DURATION));
 
-        let send_data_res = self.send_data_to_consumer();
+        let url_visisted = data.1;
+
+        let send_data_res = self.send_data_to_consumer(url_visisted.clone());
 
         match send_data_res {
             Ok(_) => {
                 let unvisited_url_key = data.0;
                 if let Some(mut value) = self.urls_data.get_mut(&unvisited_url_key) {
                     if !value.value().visited {
-                        println!(
-                            "file: producer_task.rs ~ line 135 ~ ifletSome ~ value : {} ",
-                            value.key()
-                        );
                         value.value_mut().visited = true;
-                        {
-                            let url_visited = data.1;
-                            url_visited.fetch_add(1, Ordering::Relaxed);
-                            println!(
-                                "file: producer_task.rs ~ line 152 ~ ifletSome ~ url_visited_value : {:?} ",
-                                url_visited
-                            );
-                        }
+
+                        url_visisted.fetch_add(1, Ordering::Relaxed);
                     }
                 };
             }
@@ -153,23 +115,33 @@ impl ProducerTask {
         }
     }
 
-    fn send_data_to_consumer(&mut self) -> Result<(), String> {
-        let new_value: ProducerChannelData = self.get_new_urls_two_values();
+    fn send_data_to_consumer(&mut self, url_visisted: Arc<AtomicIsize>) -> Result<(), String> {
+        let new_value: ProducerChannelData = self.get_new_urls_two_values(url_visisted.clone());
 
         if let Err(err) = self.producer_tx.send(new_value) {
             let error = err.0;
 
+            url_visisted.fetch_sub(1, Ordering::Relaxed);
+
             match error {
-                ProducerChannelData::ContinueProcessing(err_new_urls) => {
+                ProducerChannelData::ContinueProcessing(err_new_urls, url_visisted) => {
+                    let mut values = Vec::new();
                     if let Some(value) = err_new_urls.urls1 {
                         let u1 = value;
-                        self.new_urls.push(u1);
+                        values.push(u1);
                     };
 
                     if let Some(value) = err_new_urls.urls2 {
                         let u2 = value;
-                        self.new_urls.push(u2);
+                        values.push(u2);
                     };
+
+                    if !values.is_empty() {
+                        self.new_urls_add(values);
+                    }
+
+                    url_visisted.fetch_sub(1, Ordering::Relaxed);
+
                     return Err("Fail to send producer value".to_string());
                 }
                 ProducerChannelData::EndProcessing => {
@@ -182,22 +154,47 @@ impl ProducerTask {
         Ok(())
     }
 
-    fn get_new_urls_two_values(&mut self) -> ProducerChannelData {
-        let new_urls = &mut self.new_urls;
+    fn new_urls_add(&self, values: Vec<String>) {
+        let new_urls = &self.new_urls;
+        match new_urls.lock() {
+            Err(err) => {
+                println!("err: {}", err);
+            }
+            Ok(mut lock) => {
+                for value in values {
+                    lock.push(value);
+                }
+            }
+        }
+    }
 
-        let u1 = new_urls.pop();
-        let u2 = new_urls.pop();
+    fn get_new_urls_two_values(&self, url_visisted: Arc<AtomicIsize>) -> ProducerChannelData {
+        let new_urls = &self.new_urls;
 
-        let is_empty = new_urls.is_empty() && u1.is_none() && u2.is_none();
-        let payload = if !is_empty {
-            ProducerChannelData::ContinueProcessing(NewUrls {
-                urls1: u1,
-                urls2: u2,
-            })
-        } else {
-            ProducerChannelData::EndProcessing
-        };
+        match new_urls.lock() {
+            Err(err) => {
+                println!("err: {}", err);
+                ProducerChannelData::EndProcessing
+            }
+            Ok(mut lock) => {
+                let u1 = lock.pop();
+                let u2 = lock.pop();
 
-        payload
+                let is_empty = lock.is_empty() && u1.is_none() && u2.is_none();
+                let payload = if !is_empty {
+                    let new_urls_to_send = NewUrls {
+                        urls1: u1,
+                        urls2: u2,
+                    };
+
+                    ProducerChannelData::ContinueProcessing(new_urls_to_send, url_visisted)
+                } else {
+                    println!("{} end signal to consumer", self.threat_name);
+                    ProducerChannelData::EndProcessing
+                };
+
+                payload
+            }
+        }
     }
 }

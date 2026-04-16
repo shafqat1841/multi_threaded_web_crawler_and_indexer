@@ -1,5 +1,5 @@
 use std::{
-    sync::Arc,
+    sync::{Arc, Mutex, atomic::AtomicIsize},
     thread::{self, JoinHandle},
 };
 
@@ -20,7 +20,7 @@ pub struct NewUrls {
 }
 
 pub enum ProducerChannelData {
-    ContinueProcessing(NewUrls),
+    ContinueProcessing(NewUrls, Arc<AtomicIsize>),
     EndProcessing,
 }
 
@@ -34,6 +34,8 @@ pub struct Producer {
 pub enum ProducerErr {
     #[error("An error occured during locking of global state receiver")]
     GlobalStateRxNoneErr,
+      #[error("Error in creating the handler")]
+    HandlerError,
 }
 
 impl Producer {
@@ -41,6 +43,26 @@ impl Producer {
         let mut handlers: Vec<JoinHandle<()>> = Vec::new();
 
         let (producer_tx, producer_rx) = unbounded::<ProducerChannelData>();
+
+        let new_urls: [String; 15] = [
+            "https://www.example2.com".to_string(),
+            "https://www.rust-lang2.org".to_string(),
+            "https://www.wikipedia2.org".to_string(),
+            "https://www.github2.com".to_string(),
+            "https://www.stackoverflow2.com".to_string(),
+            "https://www.example3.com".to_string(),
+            "https://www.rust-lang3.org".to_string(),
+            "https://www.wikipedia3.org".to_string(),
+            "https://www.github3.com".to_string(),
+            "https://www.stackoverflow3.com".to_string(),
+            "https://www.example4.com".to_string(),
+            "https://www.rust-lang4.org".to_string(),
+            "https://www.wikipedia4.org".to_string(),
+            "https://www.github4.com".to_string(),
+            "https://www.stackoverflow4.com".to_string(),
+        ];
+
+        let new_urls_gearded = Arc::new(Mutex::new(new_urls.to_vec()));
 
         for i in 0..THREAD_COUNT {
             let guarded_global_state = guarded_global_state.clone();
@@ -53,10 +75,13 @@ impl Producer {
 
             let threat_name_clone = threat_name.clone();
 
+            let new_urls_gearded_clone = new_urls_gearded.clone();
+
             let task = move || match ProducerTask::new(
                 guarded_global_state,
                 producer_tx_clone,
                 threat_name_clone,
+                new_urls_gearded_clone,
             ) {
                 Ok(mut producer_task) => {
                     producer_task.run();
@@ -66,12 +91,16 @@ impl Producer {
                 }
             };
 
-            let handle = thread::Builder::new()
-                .name(threat_name)
-                .spawn(task)
-                .unwrap();
+            let handler = thread::Builder::new().name(threat_name).spawn(task);
 
-            handlers.push(handle);
+            match handler {
+                Err(err) => {
+                    println!("Error in creating the handler: {}", err);
+                    return Err(ProducerErr::HandlerError);
+                }
+                Ok(value) => handlers.push(value),
+            }
+
         }
 
         Ok(Producer {
