@@ -1,16 +1,17 @@
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicIsize};
 
-use crossbeam::channel::Receiver;
+use crossbeam::channel::{Receiver, Sender};
 use dashmap::DashMap;
 
 use crate::entities_system::{
-    app_global_state::{GlobalState, UrlData},
+    app_global_state::{GlobalState, GlobalStateChannelData, GuardedUrlDataType, UrlData},
     producer::{ProducerChannelData, ProducerErr},
 };
 
 pub struct ConsumerTask {
     producer_rx: Receiver<ProducerChannelData>,
     urls_data: Arc<DashMap<String, UrlData>>,
+    global_state_tx: Sender<GlobalStateChannelData>,
 }
 
 impl ConsumerTask {
@@ -19,10 +20,11 @@ impl ConsumerTask {
         producer_rx: Receiver<ProducerChannelData>,
     ) -> Result<Self, ProducerErr> {
         let urls_data = guarded_global_state.urls_data.clone();
-
+        let global_state_tx = guarded_global_state.global_state_tx.clone();
         Ok(ConsumerTask {
             producer_rx,
             urls_data,
+            global_state_tx,
         })
     }
 
@@ -38,7 +40,7 @@ impl ConsumerTask {
             };
 
             match rec_res {
-                ProducerChannelData::ContinueProcessing(new_urls) => {
+                ProducerChannelData::ContinueProcessing(new_urls, url_visisted) => {
                     let url_to_process_1 = new_urls.urls1;
                     let url_to_process_2 = new_urls.urls2;
 
@@ -47,7 +49,7 @@ impl ConsumerTask {
                     urls_to_process.into_iter().for_each(|item| match item {
                         None => {}
                         Some(val) => {
-                            self.insert_new_value(val);
+                            self.insert_new_value(val, url_visisted.clone());
                         }
                     });
                 }
@@ -61,24 +63,31 @@ impl ConsumerTask {
         println!("Consumer loop end");
     }
 
-    fn insert_new_value(&self, val: String) {
-        let new_data: UrlData = UrlData {
-            in_processing: false,
-            visited: false,
-        };
+    fn insert_new_value(&self, val: String, url_visisted: Arc<AtomicIsize>) {
+        let urls_data = &self.urls_data;
 
-        self.urls_data.insert(val, new_data);
+        let res = urls_data.get(&val);
 
-        // match self.guarded_global_state.lock() {
-        //     Err(err) => {
-        //         println!("guarded_global_state.lock error: {}", err)
-        //     }
-        //     Ok(mut global_state) => {
-        //         let urls_data = &mut global_state.urls_data;
+        if let None = res {
+            let new_data: UrlData = UrlData { visited: false };
 
-        //         // urls_data.insert(val, arc_data);
-        //         urls_data.insert(val, new_data);
-        //     }
-        // }
+            self.urls_data.insert(val.clone(), new_data);
+
+            let send_data: GuardedUrlDataType = GuardedUrlDataType(val, url_visisted);
+
+            let msg: GlobalStateChannelData = GlobalStateChannelData::ContinueProcessing(send_data);
+
+            let send_res = self.global_state_tx.send(msg);
+
+            match send_res {
+                Ok(_) => {}
+                Err(err) => {
+                    println!(
+                        "file: consumer_task.rs ~ line 84 ~ ifletErr ~ err : {} ",
+                        err
+                    );
+                }
+            }
+        }
     }
 }
