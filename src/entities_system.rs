@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::entities_system::{
     app_global_state::GlobalState,
-    consumer::Consumer,
+    consumer::{Consumer, ConsumerErr},
     producer::{Producer, ProducerErr},
 };
 
@@ -22,6 +22,8 @@ pub struct Entities {
 pub enum EntitiesErr {
     #[error("An error occured during locking of global state receiver in producer")]
     ProducerErr(#[from] ProducerErr),
+    #[error("An error occured during Consumer creation")]
+    ConsumerErr(#[from] ConsumerErr)
 }
 
 impl Entities {
@@ -32,7 +34,7 @@ impl Entities {
 
         let producer = Producer::new(guarded_global_state.clone())?;
 
-        let consumer = Consumer::new(guarded_global_state.clone(), producer.producer_rx.clone());
+        let consumer = Consumer::new(guarded_global_state.clone(), producer.producer_rx.clone())?;
 
         Ok(Entities {
             global_state: guarded_global_state,
@@ -47,9 +49,11 @@ impl Entities {
         let mut consumer = Some(self.consumer);
 
         println!("Main run started");
+        if let Err(err) = global_state.send_data_to_producer() {
+            println!("send data to producer error: {}", err);
+            return;
+        };
         loop {
-            let _ = global_state.send_data_to_producer();
-
             let all_urls_visiting_done = global_state.is_all_urls_visiting_done();
             if all_urls_visiting_done {
                 if let Err(_) = global_state.send_end_process_signal() {
@@ -84,7 +88,7 @@ impl Entities {
         {
             println!("length: {}", global_state.urls_data.len());
             global_state.urls_data.iter().for_each(|item| {
-                println!("{:?}", item.value());
+                println!("url: {:?}, data: {:?}", item.key(), item.value());
             });
         }
 
